@@ -92,6 +92,10 @@ export interface LogEntry {
    sessionId: string;
  }
 
+export interface RefreshRequest {
+   sessionId: string;
+ }
+
  export interface ProgressResponse {
    tree: ProgressTree;
    status: 'idle' | 'syncing' | 'error' | 'paused';

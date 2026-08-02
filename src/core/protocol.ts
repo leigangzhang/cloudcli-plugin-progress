@@ -4,6 +4,7 @@
    ClientMessage,
    LogEntry,
    ProgressResponse,
+   RefreshRequest,
    ServerMessage,
    WatchRequest,
  } from './types.js';
@@ -24,6 +25,11 @@
      typeof v.projectPath === 'string' &&
      typeof v.sessionId === 'string'
    );
+ }
+
+ export function isRefreshRequest(value: unknown): value is RefreshRequest {
+   const v = value as Record<string, unknown> | undefined;
+   return typeof v === 'object' && v !== null && typeof v.sessionId === 'string';
  }
 
  export function isProgressResponse(value: unknown): value is ProgressResponse {
