@@ -169,8 +169,9 @@
    }
 
    async function refresh(): Promise<void> {
+     if (!currentSessionId) return;
      try {
-       const res = await api.rpc('POST', '/refresh');
+       const res = await api.rpc('POST', '/refresh', { sessionId: currentSessionId });
        applyResponse(res);
      } catch (err) {
        status = 'error';
