@@ -125,7 +125,7 @@ export class ProgressServer {
     cloudcliSessionId: string,
     projectPath: string,
   ): Promise<SessionState> {
-    const resolved = resolveSessionLogPath(
+    const resolved = await resolveSessionLogPath(
       projectPath,
       cloudcliSessionId,
       this.options.projectsDir,

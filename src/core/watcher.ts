@@ -1,6 +1,6 @@
  import fs from 'node:fs';
  import readline from 'node:readline';
- import { resolveLogPath } from './paths.js';
+ import { resolveSessionLogPath } from './paths.js';
  import { isLogEntry, parseJsonLine } from './protocol.js';
  import type { LogEntry, SessionLogWatcher } from './types.js';
 
@@ -33,7 +33,7 @@
    }
 
    async start(projectPath: string, sessionId: string): Promise<void> {
-     this.filePath = resolveLogPath(projectPath, sessionId, this.options.projectsDir);
+     this.filePath = (await resolveSessionLogPath(projectPath, sessionId, this.options.projectsDir)).logPath;
      await this.readNewLines();
      this.watch();
    }

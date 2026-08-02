@@ -84,7 +84,6 @@ function findActiveSessionForProject(
       }
     }
     if (matches.length === 0) return undefined;
-    // Prefer sessions with recent activity; idle/waiting are active, completed/stopped are not.
     const activeStatuses = new Set(['idle', 'waiting', 'running', 'active']);
     matches.sort((a, b) => {
       const aActive = activeStatuses.has(a.status ?? '') ? 1 : 0;
@@ -98,18 +97,61 @@ function findActiveSessionForProject(
   }
 }
 
-export function resolveSessionLogPath(
+interface CloudCliSessionRow {
+  provider_session_id?: string;
+  jsonl_path?: string;
+}
+
+async function resolveFromCloudCliDatabase(
+  cloudcliSessionId: string,
+  dbPath = process.env.DATABASE_PATH ?? path.join(os.homedir(), '.cloudcli', 'auth.db'),
+): Promise<CloudCliSessionRow | undefined> {
+  try {
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(dbPath, { readOnly: true });
+    try {
+      const stmt = db.prepare(
+        'SELECT provider_session_id, jsonl_path FROM sessions WHERE session_id = ? LIMIT 1',
+      );
+      const row = stmt.get(cloudcliSessionId) as
+        | { provider_session_id?: string | null; jsonl_path?: string | null }
+        | undefined;
+      if (!row) return undefined;
+      return {
+        provider_session_id: row.provider_session_id ?? undefined,
+        jsonl_path: row.jsonl_path ?? undefined,
+      };
+    } finally {
+      db.close();
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+export async function resolveSessionLogPath(
   projectPath: string,
   cloudcliSessionId: string,
   projectsDir = path.join(os.homedir(), '.claude', 'projects'),
-): ResolvedLogPath {
+): Promise<ResolvedLogPath> {
   const exactPath = resolveLogPath(projectPath, cloudcliSessionId, projectsDir);
   if (fs.existsSync(exactPath)) {
     return { logPath: exactPath, realSessionId: cloudcliSessionId };
   }
 
-  // CloudCLI may present a stale session ID. Find the actually active Claude Code
-  // session for this project via ~/.claude/sessions/*.json metadata.
+  // CloudCLI maintains a SQLite mapping from app-facing session_id to
+  // provider-native session_id and jsonl_path. Use it when available.
+  const dbRow = await resolveFromCloudCliDatabase(cloudcliSessionId);
+  if (dbRow?.provider_session_id) {
+    const realSessionId = dbRow.provider_session_id;
+    const logPath = dbRow.jsonl_path ?? resolveLogPath(projectPath, realSessionId, projectsDir);
+    if (fs.existsSync(logPath)) {
+      return { logPath, realSessionId };
+    }
+  }
+
+  // Fallback: scan Claude Code CLI PID metadata to find an active session for
+  // the same project.
   const activeSessionId = findActiveSessionForProject(projectPath);
   if (activeSessionId) {
     const activePath = resolveLogPath(projectPath, activeSessionId, projectsDir);
@@ -118,6 +160,7 @@ export function resolveSessionLogPath(
     }
   }
 
+  // Last resort: use the most recently modified jsonl in the project dir.
   const latestPath = findLatestJsonl(projectPath, projectsDir);
   if (latestPath) {
     return {
