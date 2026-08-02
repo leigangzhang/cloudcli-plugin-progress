@@ -102,6 +102,20 @@
      refreshBtn?.addEventListener('click', () => void refresh());
    }
 
+   function applyResponse(res: unknown): void {
+     if (isProgressResponse(res)) {
+       tree = res.tree;
+       status = res.status;
+       errorMessage = res.error;
+       return;
+     }
+     if (res && typeof res === 'object' && 'error' in res) {
+       status = 'error';
+       errorMessage = (res as { error: string }).error;
+       return;
+     }
+   }
+
    async function subscribe(projectPath: string, sessionId: string): Promise<void> {
      if (ws) {
        ws.close();
@@ -144,11 +158,7 @@
 
      try {
        const res = await api.rpc('POST', '/watch', { projectPath, sessionId });
-       if (isProgressResponse(res)) {
-         tree = res.tree;
-         status = res.status;
-         errorMessage = res.error;
-       }
+       applyResponse(res);
      } catch (err) {
        status = 'error';
        errorMessage = (err as Error).message;
@@ -159,11 +169,7 @@
    async function refresh(): Promise<void> {
      try {
        const res = await api.rpc('POST', '/refresh');
-       if (isProgressResponse(res)) {
-         tree = res.tree;
-         status = res.status;
-         errorMessage = res.error;
-       }
+       applyResponse(res);
      } catch (err) {
        status = 'error';
        errorMessage = (err as Error).message;

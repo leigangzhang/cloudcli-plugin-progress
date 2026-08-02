@@ -1,5 +1,7 @@
- import http from 'node:http';
+import fs from 'node:fs';
+import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
+import { pathToFileURL } from 'node:url';
  import { ConversationBuffer } from './core/buffer.js';
  import { loadConfig, redactApiKey } from './core/config.js';
  import { DiffDetectorImpl } from './core/diff-detector.js';
@@ -48,13 +50,20 @@ export interface ProgressServerOptions {
   private clients = new Set<WebSocket>();
    private config: LLMConfig;
    private options: ProgressServerOptions;
+   private activeProjectPath: string | null = null;
    private activeSessionId: string | null = null;
    private status: ProgressResponse['status'] = 'idle';
    private errorMessage?: string;
 
    constructor(options: ProgressServerOptions = {}) {
      this.options = options;
-     this.config = options.config ?? loadConfig();
+     try {
+       this.config = options.config ?? loadConfig();
+     } catch (err) {
+       this.config = { apiKey: '', model: 'unknown' };
+       this.status = 'error';
+       this.errorMessage = (err as Error).message;
+     }
      this.buffer = new ConversationBuffer();
      this.store = new ProgressStoreImpl({ snapshotDir: options.snapshotDir });
      this.detector = new DiffDetectorImpl(this.buffer, this.options.detectorOptions);
@@ -64,7 +73,9 @@ export interface ProgressServerOptions {
    }
 
   async start(): Promise<{ port: number }> {
-    this.extractor = this.options.extractor ?? new LLMExtractionEngineImpl({ config: this.config });
+    this.extractor =
+      this.options.extractor ??
+      (this.config.apiKey ? new LLMExtractionEngineImpl({ config: this.config }) : undefined);
      return new Promise((resolve, reject) => {
        this.httpServer = http.createServer((req, res) => void this.handleHttp(req, res));
        this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
@@ -129,6 +140,10 @@ export interface ProgressServerOptions {
          await this.handleRefresh(req, res);
          return;
        }
+       if (req.method === 'GET' && url.pathname === '/debug') {
+         this.handleDebug(res);
+         return;
+       }
        res.writeHead(404);
        res.end(JSON.stringify({ error: 'Not found' }));
      } catch (err) {
@@ -145,6 +160,11 @@ export interface ProgressServerOptions {
    }
 
    private async handleWatch(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+     if (!this.config.apiKey) {
+       res.writeHead(503);
+       res.end(JSON.stringify({ error: this.errorMessage ?? 'Missing API key' }));
+       return;
+     }
      const body = parseJsonLine(await readBody(req));
      if (!isWatchRequest(body)) {
        res.writeHead(400);
@@ -164,6 +184,11 @@ export interface ProgressServerOptions {
    }
 
    private async handleRefresh(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+     if (!this.config.apiKey) {
+       res.writeHead(503);
+       res.end(JSON.stringify({ error: this.errorMessage ?? 'Missing API key' }));
+       return;
+     }
      if (!this.extractor) {
        res.writeHead(503);
        res.end(JSON.stringify({ error: 'Extractor not initialized' }));
@@ -185,6 +210,24 @@ export interface ProgressServerOptions {
      res.end(JSON.stringify(response));
    }
 
+   private handleDebug(res: http.ServerResponse): void {
+     const logPath = this.watcher.getFilePath();
+     res.writeHead(200);
+     res.end(
+       JSON.stringify({
+         projectPath: this.activeProjectPath,
+         sessionId: this.activeSessionId,
+         logPath,
+         logExists: logPath ? fs.existsSync(logPath) : false,
+         apiKeyConfigured: !!this.config.apiKey,
+         model: this.config.model,
+         bufferSize: this.buffer.getSegments(200).length,
+         status: this.status,
+         error: this.errorMessage,
+       }),
+     );
+   }
+
    private buildProgressResponse(): ProgressResponse {
      return {
        tree: this.store.getState(),
@@ -194,6 +237,7 @@ export interface ProgressServerOptions {
    }
 
    private async startSession(projectPath: string, sessionId: string): Promise<void> {
+     this.activeProjectPath = projectPath;
      this.activeSessionId = sessionId;
      this.watcher.stop();
      this.buffer = new ConversationBuffer();
@@ -208,7 +252,12 @@ export interface ProgressServerOptions {
        this.detector.ingest(entry);
      });
      await this.watcher.start(projectPath, sessionId);
-     this.setStatus('idle');
+     const logPath = this.watcher.getFilePath();
+     if (logPath && !fs.existsSync(logPath)) {
+       this.setStatus('error', `Session log not found: ${logPath}`);
+     } else {
+       this.setStatus('idle');
+     }
    }
 
   private handleWs(ws: WebSocket): void {
@@ -242,7 +291,7 @@ export interface ProgressServerOptions {
  }
 
  // If this file is executed directly, start the server and print the ready signal.
- if (import.meta.url === `file://${process.argv[1]}`) {
-   const server = new ProgressServer();
-   void server.start();
- }
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const server = new ProgressServer();
+  void server.start();
+}
