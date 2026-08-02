@@ -100,6 +100,7 @@ export interface RefreshRequest {
    tree: ProgressTree;
    status: 'idle' | 'syncing' | 'error' | 'paused';
    error?: string;
+   sessionId?: string;
  }
 
  export type ServerMessage =

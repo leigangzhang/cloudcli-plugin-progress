@@ -43,6 +43,7 @@
    let ws: WebSocket | null = null;
    let currentProjectPath: string | null = null;
    let currentSessionId: string | null = null;
+   let currentRealSessionId: string | null = null;
 
    function render(): void {
      const dark = api.context.theme === 'dark';
@@ -129,7 +130,8 @@
         ws = new WebSocket(`${proto}//${host}/plugin-ws/progress-plugin${qs}`);
 
      ws.onopen = () => {
-       ws?.send(JSON.stringify({ type: 'subscribe', projectPath, sessionId }));
+       const sid = currentRealSessionId ?? sessionId;
+       ws?.send(JSON.stringify({ type: 'subscribe', projectPath, sessionId: sid }));
      };
 
      ws.onmessage = (event) => {
@@ -161,6 +163,11 @@
      try {
        const res = await api.rpc('POST', '/watch', { projectPath, sessionId });
        applyResponse(res);
+       if (res && typeof res === 'object' && 'sessionId' in res) {
+         currentRealSessionId = (res as { sessionId?: string }).sessionId ?? sessionId;
+       } else {
+         currentRealSessionId = sessionId;
+       }
      } catch (err) {
        status = 'error';
        errorMessage = (err as Error).message;
@@ -169,9 +176,10 @@
    }
 
    async function refresh(): Promise<void> {
-     if (!currentSessionId) return;
+     const sid = currentRealSessionId ?? currentSessionId;
+     if (!sid) return;
      try {
-       const res = await api.rpc('POST', '/refresh', { sessionId: currentSessionId });
+       const res = await api.rpc('POST', '/refresh', { sessionId: sid });
        applyResponse(res);
      } catch (err) {
        status = 'error';
@@ -194,6 +202,7 @@
      if (p !== currentProjectPath || s !== currentSessionId) {
        currentProjectPath = p;
        currentSessionId = s;
+       currentRealSessionId = null;
        if (p && s) {
          void subscribe(p, s);
        } else {

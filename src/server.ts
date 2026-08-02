@@ -7,6 +7,7 @@ import { loadConfig, redactApiKey } from './core/config.js';
 import { DiffDetectorImpl } from './core/diff-detector.js';
 import { LLMExtractionEngineImpl } from './core/extractor.js';
 import { isRefreshRequest, isWatchRequest, parseJsonLine } from './core/protocol.js';
+import { resolveSessionLogPath } from './core/paths.js';
 import { ProgressStoreImpl } from './core/store.js';
 import { FileLogWatcher } from './core/watcher.js';
 import type {
@@ -30,6 +31,7 @@ export interface ProgressServerOptions {
 interface SessionState {
   projectPath: string;
   sessionId: string;
+  cloudcliSessionId: string;
   watcher: FileLogWatcher;
   buffer: ConversationBuffer;
   detector: DiffDetectorImpl;
@@ -56,6 +58,7 @@ export class ProgressServer {
   private extractor?: LLMExtractionEngine;
   private clients = new Map<WebSocket, string>();
   private sessions = new Map<string, SessionState>();
+  private cloudcliToReal = new Map<string, string>();
   private config: LLMConfig;
   private options: ProgressServerOptions;
 
@@ -91,6 +94,7 @@ export class ProgressServer {
   async stop(): Promise<void> {
     this.sessions.forEach((session) => session.watcher.stop());
     this.sessions.clear();
+    this.cloudcliToReal.clear();
     this.clients.forEach((_, ws) => ws.close());
     this.clients.clear();
     await new Promise<void>((resolve) => {
@@ -118,11 +122,20 @@ export class ProgressServer {
   }
 
   private async getOrCreateSession(
-    sessionId: string,
+    cloudcliSessionId: string,
     projectPath: string,
   ): Promise<SessionState> {
-    let session = this.sessions.get(sessionId);
+    const resolved = resolveSessionLogPath(
+      projectPath,
+      cloudcliSessionId,
+      this.options.projectsDir,
+    );
+    const realSessionId = resolved.realSessionId;
+    this.cloudcliToReal.set(cloudcliSessionId, realSessionId);
+
+    let session = this.sessions.get(realSessionId);
     if (session) {
+      session.cloudcliSessionId = cloudcliSessionId;
       if (projectPath && session.projectPath !== projectPath) {
         session.projectPath = projectPath;
         session.watcher.stop();
@@ -131,10 +144,10 @@ export class ProgressServer {
           session!.buffer.push(entry);
           session!.detector.ingest(entry);
         });
-        await session.watcher.start(projectPath, sessionId);
+        await session.watcher.start(projectPath, realSessionId);
         const logPath = session.watcher.getFilePath();
         if (logPath && !fs.existsSync(logPath)) {
-          this.setStatus(sessionId, 'error', `Session log not found: ${logPath}`);
+          this.setStatus(realSessionId, 'error', `Session log not found: ${logPath}`);
         }
       }
       return session;
@@ -147,7 +160,8 @@ export class ProgressServer {
 
     session = {
       projectPath,
-      sessionId,
+      sessionId: realSessionId,
+      cloudcliSessionId,
       watcher,
       buffer,
       detector,
@@ -157,7 +171,7 @@ export class ProgressServer {
 
     this.bindDetector(session);
     session.store.subscribe((tree) =>
-      this.broadcast(sessionId, { type: 'progress', tree }),
+      this.broadcast(realSessionId, { type: 'progress', tree }),
     );
 
     watcher.onLine((entry: LogEntry) => {
@@ -165,20 +179,32 @@ export class ProgressServer {
       session!.detector.ingest(entry);
     });
 
-    if (!store.loadSnapshot(sessionId)) {
+    if (!store.loadSnapshot(realSessionId)) {
       store.setState({ version: 0, goals: [] });
     }
 
-    await watcher.start(projectPath, sessionId);
+    await watcher.start(projectPath, realSessionId);
     const logPath = watcher.getFilePath();
     if (logPath && !fs.existsSync(logPath)) {
-      this.setStatus(sessionId, 'error', `Session log not found: ${logPath}`);
+      this.setStatus(realSessionId, 'error', `Session log not found: ${logPath}`);
     } else {
-      this.setStatus(sessionId, 'idle');
+      this.setStatus(realSessionId, 'idle');
     }
 
-    this.sessions.set(sessionId, session);
+    this.sessions.set(realSessionId, session);
     return session;
+  }
+
+  private resolveSessionId(requestedSessionId: string | null): string | undefined {
+    if (!requestedSessionId) return undefined;
+    if (this.sessions.has(requestedSessionId)) {
+      return requestedSessionId;
+    }
+    const mapped = this.cloudcliToReal.get(requestedSessionId);
+    if (mapped && this.sessions.has(mapped)) {
+      return mapped;
+    }
+    return undefined;
   }
 
   private async handleHttp(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -239,7 +265,8 @@ export class ProgressServer {
   }
 
   private handleProgress(res: http.ServerResponse, url: URL): void {
-    const sessionId = url.searchParams.get('sessionId') ?? this.getDefaultSessionId();
+    const requestedSessionId = url.searchParams.get('sessionId');
+    const sessionId = this.resolveSessionId(requestedSessionId ?? null) ?? this.getDefaultSessionId();
     if (!sessionId) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: 'Missing sessionId' }));
@@ -271,7 +298,10 @@ export class ProgressServer {
       return;
     }
     const body = parseJsonLine(await readBody(req));
-    const sessionId = isRefreshRequest(body) ? body.sessionId : this.getDefaultSessionId();
+    const requestedSessionId = isRefreshRequest(body)
+      ? body.sessionId
+      : this.getDefaultSessionId();
+    const sessionId = this.resolveSessionId(requestedSessionId ?? null) ?? requestedSessionId;
     if (!sessionId) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: 'Missing sessionId' }));
@@ -300,7 +330,8 @@ export class ProgressServer {
   }
 
   private handleDebug(res: http.ServerResponse, url: URL): void {
-    const sessionId = url.searchParams.get('sessionId') ?? this.getDefaultSessionId();
+    const requestedSessionId = url.searchParams.get('sessionId');
+    const sessionId = this.resolveSessionId(requestedSessionId ?? null) ?? this.getDefaultSessionId();
     if (!sessionId) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: 'Missing sessionId' }));
@@ -317,6 +348,7 @@ export class ProgressServer {
     res.end(
       JSON.stringify({
         projectPath: session.projectPath,
+        requestedSessionId: session.cloudcliSessionId,
         sessionId: session.sessionId,
         logPath,
         logExists: logPath ? fs.existsSync(logPath) : false,
@@ -334,6 +366,7 @@ export class ProgressServer {
       tree: session.store.getState(),
       status: session.status,
       error: session.errorMessage,
+      sessionId: session.sessionId,
     };
   }
 
@@ -354,8 +387,9 @@ export class ProgressServer {
       if (typed.type === 'subscribe') {
         const msg = parsed as { projectPath?: string; sessionId?: string };
         if (typeof msg.projectPath === 'string' && typeof msg.sessionId === 'string') {
-          this.clients.set(ws, msg.sessionId);
-          const session = this.sessions.get(msg.sessionId);
+          const realSessionId = this.resolveSessionId(msg.sessionId) ?? msg.sessionId;
+          this.clients.set(ws, realSessionId);
+          const session = this.sessions.get(realSessionId);
           if (session) {
             this.send(ws, { type: 'progress', tree: session.store.getState() });
             this.send(ws, { type: 'status', status: session.status, error: session.errorMessage });
