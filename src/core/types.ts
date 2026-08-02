@@ -119,6 +119,7 @@ export interface LogEntry {
    stop(): void;
    onLine(callback: (entry: LogEntry) => void): () => void;
    getCursor(): { bytesRead: number; lastLine: number };
+   getFilePath(): string;
  }
 
  export interface DiffDetector {

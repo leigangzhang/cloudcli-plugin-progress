@@ -15,7 +15,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 1. Ensure you have [CloudCLI](https://cloudcli.ai) installed.
 2. Clone or copy this plugin into your CloudCLI plugins directory:
    ```bash
-   git clone <repo> ~/.cloudcli/plugins/progress-plugin
+   git clone git@github.com:leigangzhang/cloudcli-plugin-progress.git ~/.cloudcli/plugins/progress-plugin
    cd ~/.cloudcli/plugins/progress-plugin
    npm install
    npm run build
@@ -96,8 +96,8 @@ npm run dev
 
 ## Troubleshooting
 
-- **No progress shown**: Verify `ANTHROPIC_API_KEY` is set and the session log exists.
-- **Sync errors**: Check the CloudCLI server logs; API keys are redacted in error messages.
+- **No progress shown**: Verify `ANTHROPIC_API_KEY` is set and the session log exists. The plugin reads `ANTHROPIC_API_KEY` (preferred) or the legacy `ANTHROPIC_AUTH_TOKEN` from `~/.claude/settings.json`, environment variables, or `X-Plugin-Secret` headers.
+- **Sync errors**: The UI will display the error message. For details, query the backend `/debug` endpoint or check the CloudCLI server logs; API keys are redacted in error messages.
 - **WebSocket not updating**: Ensure the plugin server started and printed `{"ready": true, "port": ...}`.
 
 ## License

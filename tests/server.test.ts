@@ -124,3 +124,81 @@ function collectMessages(ws: WebSocket): unknown[] {
      expect((data as { status: string }).status).toBe('idle');
    });
  });
+
+describe('ProgressServer without API key', () => {
+  let server: ProgressServer;
+  let port: number;
+
+  beforeAll(async () => {
+    server = new ProgressServer({
+      config: { apiKey: '', model: 'unknown' },
+    });
+    const result = await server.start();
+    port = result.port;
+  });
+
+  afterAll(async () => {
+    await server.stop();
+  });
+
+  it('watch endpoint returns 503 when API key is missing', async () => {
+    const { status, data } = await fetchJson(port, 'POST', '/watch', {
+      projectPath: '/tmp',
+      sessionId: 'sess-no-key',
+    });
+    expect(status).toBe(503);
+    expect((data as { error?: string }).error).toMatch(/Missing Anthropic API key|Missing API key/);
+  });
+});
+
+describe('ProgressServer debug endpoint', () => {
+  let server: ProgressServer;
+  let port: number;
+  let tmp: ReturnType<typeof createTempDir>;
+
+  beforeAll(async () => {
+    tmp = createTempDir();
+    server = new ProgressServer({
+      config: makeConfig(),
+      projectsDir: path.join(tmp.path, 'projects'),
+      snapshotDir: path.join(tmp.path, 'snapshots'),
+    });
+    const result = await server.start();
+    port = result.port;
+  });
+
+  afterAll(async () => {
+    await server.stop();
+    tmp.cleanup();
+  });
+
+  it('returns diagnostic info', async () => {
+    const projectPath = tmp.path;
+    const sessionId = 'debug-sess';
+    const encoded = encodeProjectPath(tmp.path);
+    const logFile = path.join(tmp.path, 'projects', encoded, `${sessionId}.jsonl`);
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    writeJsonl(logFile, [{ type: 'system', uuid: 's0' }]);
+
+    await fetchJson(port, 'POST', '/watch', { projectPath, sessionId });
+    const { status, data } = await fetchJson(port, 'GET', '/debug');
+    expect(status).toBe(200);
+    const debug = data as Record<string, unknown>;
+    expect(debug.projectPath).toBe(projectPath);
+    expect(debug.sessionId).toBe(sessionId);
+    expect(debug.apiKeyConfigured).toBe(true);
+    expect(debug.logExists).toBe(true);
+  });
+
+  it('reports missing log file', async () => {
+    const { status, data } = await fetchJson(port, 'POST', '/watch', {
+      projectPath: '/nonexistent/project',
+      sessionId: 'missing-log',
+    });
+    expect(status).toBe(200);
+    const response = data as { status: string; error?: string };
+    expect(response.status).toBe('error');
+    expect(response.error).toMatch(/Session log not found/);
+  });
+});
+

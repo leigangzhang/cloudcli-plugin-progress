@@ -66,6 +66,10 @@
      return { bytesRead: this.position, lastLine: this.lineCount };
    }
 
+   getFilePath(): string {
+     return this.filePath;
+   }
+
    private watch(): void {
      if (this.options.watchImpl === 'watchFile') {
        this.pollTimer = setInterval(() => this.readNewLines(), this.options.pollInterval);
