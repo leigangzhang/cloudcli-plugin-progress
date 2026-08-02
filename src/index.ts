@@ -124,7 +124,9 @@
 
      const proto = globalThis.location?.protocol === 'https:' ? 'wss:' : 'ws:';
      const host = globalThis.location?.host ?? 'localhost';
-     ws = new WebSocket(`${proto}//${host}/plugin-ws/progress-plugin`);
+     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('auth-token') || '' : '';
+     const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+        ws = new WebSocket(`${proto}//${host}/plugin-ws/progress-plugin${qs}`);
 
      ws.onopen = () => {
        ws?.send(JSON.stringify({ type: 'subscribe', projectPath, sessionId }));
