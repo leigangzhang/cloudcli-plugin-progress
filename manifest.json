@@ -1,0 +1,13 @@
+ {
+   "name": "progress-plugin",
+   "displayName": "Progress",
+   "version": "1.0.0",
+   "description": "Auto-extract and display session progress from Claude Code CLI logs.",
+   "author": "Ray",
+   "icon": "icon.svg",
+   "type": "module",
+   "slot": "tab",
+   "entry": "dist/index.js",
+   "server": "dist/server.js",
+   "permissions": []
+ }
