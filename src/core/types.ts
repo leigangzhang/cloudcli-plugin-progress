@@ -20,6 +20,11 @@ export interface LogEntry {
   level?: string;
   content?: ContentBlock[];
   stopReason?: string;
+  message?: {
+    role?: string;
+    content?: ContentBlock[];
+    stop_reason?: string;
+  };
   // Preserve unknown fields for forward compatibility.
   [key: string]: unknown;
 }
