@@ -66,15 +66,17 @@
      for (const entry of entries) {
        if (entry.type === 'assistant') {
          role = 'assistant';
-         stopReason = entry.stopReason ?? stopReason;
-         for (const block of entry.content ?? []) {
+         stopReason = (entry.stopReason ?? entry.message?.stop_reason) || stopReason;
+         const blocks = entry.content ?? entry.message?.content ?? [];
+         for (const block of blocks) {
            this.processAssistantBlock(block, thinkingParts, textParts, toolUses);
          }
        } else if (entry.type === 'user') {
          if (role !== 'assistant') {
            role = 'user';
          }
-         for (const block of entry.content ?? []) {
+         const blocks = entry.content ?? entry.message?.content ?? [];
+         for (const block of blocks) {
            this.processUserBlock(block, textParts, toolResults);
          }
        }
