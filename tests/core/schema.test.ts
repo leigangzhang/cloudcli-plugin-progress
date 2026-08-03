@@ -35,38 +35,38 @@
      expect(errors.some((e) => e.includes('status'))).toBe(true);
    });
 
-   it('rejects a subject longer than 60 chars', () => {
+   it('rejects a subject longer than 100 chars', () => {
      const tree: ProgressTree = {
        version: 1,
        goals: [
          {
            id: 'g1',
-           subject: 'a'.repeat(61),
+           subject: 'a'.repeat(101),
            status: 'pending',
          },
        ],
      };
      const errors = validateProgressTree(tree);
-     expect(errors.some((e) => e.includes('subject') && e.includes('60'))).toBe(true);
+     expect(errors.some((e) => e.includes('subject') && e.includes('100'))).toBe(true);
    });
 
-   it('rejects a description longer than 120 chars', () => {
+   it('rejects a description longer than 200 chars', () => {
      const tree: ProgressTree = {
        version: 1,
        goals: [
          {
            id: 'g1',
            subject: 'x',
-           description: 'b'.repeat(121),
+           description: 'b'.repeat(201),
            status: 'pending',
          },
        ],
      };
      const errors = validateProgressTree(tree);
-     expect(errors.some((e) => e.includes('description') && e.includes('120'))).toBe(true);
+     expect(errors.some((e) => e.includes('description') && e.includes('200'))).toBe(true);
    });
 
-   it('rejects a step subject longer than 60 chars', () => {
+   it('rejects a step subject longer than 100 chars', () => {
      const tree: ProgressTree = {
        version: 1,
        goals: [
@@ -74,22 +74,22 @@
            id: 'g1',
            subject: 'x',
            status: 'pending',
-           steps: [{ id: 's1', subject: 'c'.repeat(61), status: 'pending' }],
+           steps: [{ id: 's1', subject: 'c'.repeat(101), status: 'pending' }],
          },
        ],
      };
      const errors = validateProgressTree(tree);
-     expect(errors.some((e) => e.includes('step') && e.includes('60'))).toBe(true);
+     expect(errors.some((e) => e.includes('step') && e.includes('100'))).toBe(true);
    });
  });
 
  describe('truncate helpers', () => {
-   it('truncates subject to 60 chars', () => {
-     expect(truncateSubject('a'.repeat(80))).toBe('a'.repeat(60));
+   it('truncates subject to 100 chars', () => {
+     expect(truncateSubject('a'.repeat(150))).toBe('a'.repeat(100));
    });
 
-   it('truncates description to 120 chars', () => {
-     expect(truncateDescription('b'.repeat(200))).toBe('b'.repeat(120));
+   it('truncates description to 200 chars', () => {
+     expect(truncateDescription('b'.repeat(300))).toBe('b'.repeat(200));
    });
 
    it('keeps short strings unchanged', () => {

@@ -116,11 +116,11 @@
      const client = mockClient({
        text: JSON.stringify({
          version: 2,
-         goals: [{ id: 'g1', subject: 'x'.repeat(70), status: 'pending' }],
+         goals: [{ id: 'g1', subject: 'x'.repeat(110), status: 'pending' }],
        }),
      });
      client.messages.create = vi.fn().mockResolvedValue({
-       content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [{ id: 'g1', subject: 'x'.repeat(70), status: 'pending' }] }) }],
+       content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [{ id: 'g1', subject: 'x'.repeat(110), status: 'pending' }] }) }],
        usage: { input_tokens: 10, output_tokens: 5 },
      });
      const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });

@@ -1,7 +1,7 @@
  import type { ProgressGoal, ProgressStep, ProgressTree } from './types.js';
 
- const MAX_SUBJECT = 60;
- const MAX_DESCRIPTION = 120;
+ const MAX_SUBJECT = 100;
+ const MAX_DESCRIPTION = 200;
 
  const VALID_STATUSES = ['pending', 'in_progress', 'completed', 'deleted'] as const;
 
