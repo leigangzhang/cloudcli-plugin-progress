@@ -183,10 +183,17 @@ export class ProgressServer {
       status: 'idle',
     };
 
-    this.bindDetector(session);
-    session.store.subscribe((tree) =>
-      this.broadcast(realSessionId, { type: 'progress', tree }),
-    );
+   this.bindDetector(session);
+   session.store.subscribe((tree) =>
+     this.broadcast(realSessionId, { type: 'progress', tree }),
+   );
+    session.store.subscribe(() => {
+      try {
+        session!.store.saveSnapshot(realSessionId);
+      } catch (err) {
+        console.error('Failed to save snapshot:', (err as Error).message);
+      }
+    });
 
     watcher.onLine((entry: LogEntry) => {
       session!.buffer.push(entry);
@@ -331,8 +338,13 @@ export class ProgressServer {
     try {
       const segments = session.buffer.getSegments(10);
       const updated = await this.extractor.extract(session.store.getState(), segments);
-      session.store.setState(updated);
-      this.setStatus(sessionId, 'idle');
+     session.store.setState(updated);
+     this.setStatus(sessionId, 'idle');
+      try {
+        session.store.saveSnapshot(sessionId);
+      } catch (err) {
+        console.error('Failed to save snapshot:', (err as Error).message);
+      }
     } catch (err) {
       const message = (err as Error).message;
       console.error('Refresh failed:', redactApiKey(message, this.config.apiKey));
