@@ -14,16 +14,17 @@
    client?: Anthropic;
  }
 
- const SYSTEM_PROMPT = `You are a session progress extractor. Your job is to analyze new conversation segments and update the progress tree accordingly.
+const SYSTEM_PROMPT = `You are a session progress extractor. Your job is to analyze new conversation segments and update the progress tree accordingly.
 
- Rules:
- 1. Keep existing IDs stable. Only add, update, or mark nodes as completed based on the new segments.
- 2. Add new goals when a new high-level objective is identified.
- 3. Add steps under a goal when concrete actions are taken.
- 4. Mark a goal or step as completed only when the segment clearly indicates completion.
- 5. Each subject must be <= 60 characters. Each description must be <= 120 characters.
- 6. Use concise, action-oriented language.
- 7. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.`;
+Rules:
+1. Keep existing IDs stable. Only add, update, or mark nodes as completed based on the new segments.
+2. Add new goals when a new high-level objective is identified.
+3. Add steps under a goal when concrete actions are taken.
+4. Mark a goal or step as completed only when the segment clearly indicates completion.
+5. Each subject must be <= 100 characters. Each description must be <= 200 characters.
+6. Use clear, action-oriented language with enough detail to be useful. Prefer richer descriptions over one-word summaries.
+7. Detect the dominant language used by the user in the conversation segments and generate the progress tree in that same language. If the conversation mixes languages, prefer the user's language over the assistant's language.
+8. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.`;
 
  function buildPrompt(tree: ProgressTree, segments: ConversationSegment[], strict = false): string {
    const base = `Current Progress Tree:
