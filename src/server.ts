@@ -121,6 +121,19 @@ export class ProgressServer {
     });
   }
 
+  private migrateClients(fromSessionId: string, toSessionId: string): void {
+    this.clients.forEach((sid, ws) => {
+      if (sid === fromSessionId) {
+        this.clients.set(ws, toSessionId);
+        const session = this.sessions.get(toSessionId);
+        if (session) {
+          this.send(ws, { type: 'progress', tree: session.store.getState() });
+          this.send(ws, { type: 'status', status: session.status, error: session.errorMessage });
+        }
+      }
+    });
+  }
+
   private async getOrCreateSession(
     cloudcliSessionId: string,
     projectPath: string,
@@ -132,6 +145,7 @@ export class ProgressServer {
     );
     const realSessionId = resolved.realSessionId;
     this.cloudcliToReal.set(cloudcliSessionId, realSessionId);
+    this.migrateClients(cloudcliSessionId, realSessionId);
 
     let session = this.sessions.get(realSessionId);
     if (session) {
