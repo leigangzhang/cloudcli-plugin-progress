@@ -26,11 +26,11 @@ Rules:
 7. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.
 
 Examples of good subjects (one sentence each):
-- 梳理Gap一年半后的核心矛盾与下半年行动优先级
-- 设计健身-求职-作息时间表及饮食方案
-- 分析训记训练计划并设计配套饮食方案
-- 整理上海杭州数据工程师招聘市场调研报告
-- 综合评估用户个人竞争力并输出改进建议`;
+- Identify the core challenges and priorities for the second half of the year after a gap year and a half.
+- Design a fitness-job-care schedule and diet plan.
+- Analyze training plans and design corresponding diet plans.
+- Compile market research reports on data engineer recruitment in Shanghai and Hangzhou.
+- Comprehensively evaluate users' individual competitiveness and provide improvement suggestions.`;
 
  function buildPrompt(tree: ProgressTree, segments: ConversationSegment[], strict = false): string {
    const base = `Current Progress Tree:
