@@ -35,62 +35,59 @@
      expect(errors.some((e) => e.includes('status'))).toBe(true);
    });
 
-   it('rejects a subject longer than 100 chars', () => {
-     const tree: ProgressTree = {
-       version: 1,
-       goals: [
-         {
-           id: 'g1',
-           subject: 'a'.repeat(101),
-           status: 'pending',
-         },
-       ],
-     };
-     const errors = validateProgressTree(tree);
-     expect(errors.some((e) => e.includes('subject') && e.includes('100'))).toBe(true);
-   });
+  it('accepts a long single-sentence subject', () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'a'.repeat(250),
+          status: 'pending',
+        },
+      ],
+    };
+    expect(validateProgressTree(tree)).toEqual([]);
+  });
 
-   it('rejects a description longer than 200 chars', () => {
-     const tree: ProgressTree = {
-       version: 1,
-       goals: [
-         {
-           id: 'g1',
-           subject: 'x',
-           description: 'b'.repeat(201),
-           status: 'pending',
-         },
-       ],
-     };
-     const errors = validateProgressTree(tree);
-     expect(errors.some((e) => e.includes('description') && e.includes('200'))).toBe(true);
-   });
+  it('accepts a long single-sentence description', () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'x',
+          description: 'b'.repeat(550),
+          status: 'pending',
+        },
+      ],
+    };
+    expect(validateProgressTree(tree)).toEqual([]);
+  });
 
-   it('rejects a step subject longer than 100 chars', () => {
-     const tree: ProgressTree = {
-       version: 1,
-       goals: [
-         {
-           id: 'g1',
-           subject: 'x',
-           status: 'pending',
-           steps: [{ id: 's1', subject: 'c'.repeat(101), status: 'pending' }],
-         },
-       ],
-     };
-     const errors = validateProgressTree(tree);
-     expect(errors.some((e) => e.includes('step') && e.includes('100'))).toBe(true);
-   });
+  it('accepts a long single-sentence step subject', () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'x',
+          status: 'pending',
+          steps: [{ id: 's1', subject: 'c'.repeat(250), status: 'pending' }],
+        },
+      ],
+    };
+    expect(validateProgressTree(tree)).toEqual([]);
+  });
  });
 
  describe('truncate helpers', () => {
-   it('truncates subject to 100 chars', () => {
-     expect(truncateSubject('a'.repeat(150))).toBe('a'.repeat(100));
-   });
+  it('truncates subject to 300 chars', () => {
+    expect(truncateSubject('a'.repeat(400))).toBe('a'.repeat(300));
+  });
 
-   it('truncates description to 200 chars', () => {
-     expect(truncateDescription('b'.repeat(300))).toBe('b'.repeat(200));
-   });
+  it('truncates description to 600 chars', () => {
+    expect(truncateDescription('b'.repeat(800))).toBe('b'.repeat(600));
+  });
 
    it('keeps short strings unchanged', () => {
      expect(truncateSubject('short')).toBe('short');

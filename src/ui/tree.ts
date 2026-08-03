@@ -26,8 +26,8 @@ import type { ThemeColors } from './theme.js';
  function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: ThemeColors): string {
    const expanded = options.expanded.has(goal.id);
    const toggle = expanded ? chevronDown() : chevronRight();
-   const title = escapeHtml(truncateSubject(goal.subject));
-   const description = goal.description ? escapeHtml(truncateDescription(goal.description)) : '';
+  const title = escapeHtml(truncateSubject(goal.subject, 300));
+  const description = goal.description ? escapeHtml(truncateDescription(goal.description, 600)) : '';
    return `
      <div class="pp-goal" data-goal-id="${escapeHtml(goal.id)}">
        <div class="pp-goal-header" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.dim}'" onmouseout="this.style.background='${colors.surface}'">
@@ -49,7 +49,7 @@ import type { ThemeColors } from './theme.js';
  }
 
  function renderStep(step: ProgressStep, colors: ThemeColors): string {
-   const title = escapeHtml(truncateSubject(step.subject));
+  const title = escapeHtml(truncateSubject(step.subject, 300));
    const tool = step.toolUse ? `<span style="color:${colors.muted};font-size:0.65rem;margin-left:auto;">${escapeHtml(step.toolUse)}</span>` : '';
    return `
      <div class="pp-step" style="display:flex;align-items:center;gap:8px;padding:5px 0;">
