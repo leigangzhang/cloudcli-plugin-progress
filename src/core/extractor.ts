@@ -21,10 +21,16 @@ Rules:
 2. Add new goals when a new high-level objective is identified.
 3. Add steps under a goal when concrete actions are taken.
 4. Mark a goal or step as completed only when the segment clearly indicates completion.
-5. Each subject must be <= 100 characters. Each description must be <= 200 characters.
-6. Use clear, action-oriented language with enough detail to be useful. Prefer richer descriptions over one-word summaries.
-7. Detect the dominant language used by the user in the conversation segments and generate the progress tree in that same language. If the conversation mixes languages, prefer the user's language over the assistant's language.
-8. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.`;
+5. Use exactly one clear sentence for each subject and one clear sentence for each description. Do not enforce arbitrary character limits; focus on clarity and usefulness.
+6. Detect the dominant language used by the user in the conversation segments and generate the progress tree in that same language. If the conversation mixes languages, prefer the user's language over the assistant's language.
+7. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.
+
+Examples of good subjects (one sentence each):
+- 梳理Gap一年半后的核心矛盾与下半年行动优先级
+- 设计健身-求职-作息时间表及饮食方案
+- 分析训记训练计划并设计配套饮食方案
+- 整理上海杭州数据工程师招聘市场调研报告
+- 综合评估用户个人竞争力并输出改进建议`;
 
  function buildPrompt(tree: ProgressTree, segments: ConversationSegment[], strict = false): string {
    const base = `Current Progress Tree:

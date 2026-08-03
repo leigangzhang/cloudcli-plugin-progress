@@ -111,19 +111,19 @@
      expect(usages[0]).toEqual({ inputTokens: 123, outputTokens: 45 });
    });
 
-   it('validates schema and throws for invalid tree', async () => {
-     const tree: ProgressTree = { version: 1, goals: [] };
-     const client = mockClient({
-       text: JSON.stringify({
-         version: 2,
-         goals: [{ id: 'g1', subject: 'x'.repeat(110), status: 'pending' }],
-       }),
-     });
-     client.messages.create = vi.fn().mockResolvedValue({
-       content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [{ id: 'g1', subject: 'x'.repeat(110), status: 'pending' }] }) }],
-       usage: { input_tokens: 10, output_tokens: 5 },
-     });
-     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-     await expect(engine.extract(tree, [])).rejects.toThrow(/subject/);
-   });
+  it('validates schema and throws for invalid tree', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const client = mockClient({
+      text: JSON.stringify({
+        version: 2,
+        goals: [{ id: 'g1', subject: 'Valid subject', status: 'unknown' }],
+      }),
+    });
+    client.messages.create = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [{ id: 'g1', subject: 'Valid subject', status: 'unknown' }] }) }],
+      usage: { input_tokens: 10, output_tokens: 5 },
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    await expect(engine.extract(tree, [])).rejects.toThrow(/status/);
+  });
  });

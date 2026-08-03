@@ -1,7 +1,7 @@
  import type { ProgressGoal, ProgressStep, ProgressTree } from './types.js';
 
- const MAX_SUBJECT = 100;
- const MAX_DESCRIPTION = 200;
+const MAX_SUBJECT = 300;
+const MAX_DESCRIPTION = 600;
 
  const VALID_STATUSES = ['pending', 'in_progress', 'completed', 'deleted'] as const;
 
@@ -25,11 +25,9 @@
    if (typeof step.id !== 'string' || step.id === '') {
      errors.push(`${path}.id must be a non-empty string`);
    }
-   if (typeof step.subject !== 'string' || step.subject === '') {
-     errors.push(`${path}.subject must be a non-empty string`);
-   } else if (step.subject.length > MAX_SUBJECT) {
-     errors.push(`${path}.subject must be ≤ ${MAX_SUBJECT} chars`);
-   }
+  if (typeof step.subject !== 'string' || step.subject === '') {
+    errors.push(`${path}.subject must be a non-empty string`);
+  }
    if (!isProgressStatus(step.status)) {
      errors.push(`${path}.status must be one of ${VALID_STATUSES.join(', ')}`);
    }
@@ -44,15 +42,10 @@
    if (typeof goal.id !== 'string' || goal.id === '') {
      errors.push(`${path}.id must be a non-empty string`);
    }
-   if (typeof goal.subject !== 'string' || goal.subject === '') {
-     errors.push(`${path}.subject must be a non-empty string`);
-   } else if (goal.subject.length > MAX_SUBJECT) {
-     errors.push(`${path}.subject must be ≤ ${MAX_SUBJECT} chars`);
-   }
-   if (goal.description !== undefined && goal.description.length > MAX_DESCRIPTION) {
-     errors.push(`${path}.description must be ≤ ${MAX_DESCRIPTION} chars`);
-   }
-   if (!isProgressStatus(goal.status)) {
+  if (typeof goal.subject !== 'string' || goal.subject === '') {
+    errors.push(`${path}.subject must be a non-empty string`);
+  }
+  if (!isProgressStatus(goal.status)) {
      errors.push(`${path}.status must be one of ${VALID_STATUSES.join(', ')}`);
    }
    if (goal.steps) {
