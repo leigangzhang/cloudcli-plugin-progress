@@ -155,7 +155,7 @@ export interface DiffDetector {
     flush(): void;
 }
 export interface LLMExtractionEngine {
-    extract(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree>;
+    extract(tree: ProgressTree, turns: ConversationTurn[], onProgress?: (tree: ProgressTree) => void): Promise<ProgressTree>;
     onUsage(callback: (usage: {
         inputTokens: number;
         outputTokens: number;

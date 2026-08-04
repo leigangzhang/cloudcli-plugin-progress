@@ -1,5 +1,13 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import WebSocket from 'ws';
+class MockWebSocket {
+  onopen?: () => void;
+  onmessage?: (event: { data: string }) => void;
+  onerror?: () => void;
+  onclose?: () => void;
+  send = vi.fn();
+  close = vi.fn();
+}
+
 import { mount, unmount } from '../src/index.js';
 import type { PluginAPI } from '../src/types.js';
 import { wait } from './utils.js';
@@ -53,7 +61,7 @@ describe('mount/unmount', () => {
     container = makeElement('div');
     vi.stubGlobal('document', makeDocument());
     vi.stubGlobal('location', { protocol: 'http:', host: 'localhost' });
-    vi.stubGlobal('WebSocket', WebSocket);
+    vi.stubGlobal('WebSocket', MockWebSocket);
   });
 
   afterEach(() => {
@@ -90,5 +98,31 @@ describe('mount/unmount', () => {
     mount(container, api);
     unmount(container);
     expect(unsubscribe).toHaveBeenCalled();
+  });
+
+  it('renders a non-disabled Refresh button when there is content', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      tree: {
+        version: 1,
+        goals: [{ id: 'g1', subject: 'Goal 1', status: 'in_progress', steps: [] }],
+      },
+      status: 'idle',
+    });
+    const api: PluginAPI = {
+      context: {
+        theme: 'dark',
+        project: { name: 'Test', path: '/test' },
+        session: { id: 's1', title: 'Session' },
+      },
+      onContextChange: vi.fn().mockReturnValue(() => {}),
+      rpc,
+    };
+
+    mount(container, api);
+    await wait(0);
+
+    expect(container.innerHTML).toContain('Refresh');
+    expect(container.innerHTML).not.toContain('Refreshing...');
+    expect(container.innerHTML).not.toContain('disabled');
   });
 });

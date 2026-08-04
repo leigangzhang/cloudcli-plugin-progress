@@ -105,11 +105,13 @@ export class LLMExtractionEngineImpl {
                     timeout: this.config.requestTimeoutMs ?? 60000,
                 });
     }
-    async extract(tree, turns) {
+    async extract(tree, turns, onProgress) {
         if (this.config.usePolling && turns.length > 5) {
-            return this.extractByPolling(tree, turns);
+            return this.extractByPolling(tree, turns, onProgress);
         }
-        return this.extractWithRetry(tree, turns);
+        const result = await this.extractWithRetry(tree, turns);
+        onProgress?.(result);
+        return result;
     }
     async extractWithRetry(tree, turns) {
         try {
@@ -128,7 +130,7 @@ export class LLMExtractionEngineImpl {
             return await this.doExtract(tree, summarizeTurns(turns, 20), true);
         }
     }
-    async extractByPolling(tree, turns) {
+    async extractByPolling(tree, turns, onProgress) {
         const chunkSize = 5;
         const chunks = chunkTurns(turns, chunkSize);
         let currentTree = tree;
@@ -142,6 +144,7 @@ export class LLMExtractionEngineImpl {
                 console.warn('Chunk extraction failed with accumulated tree, retrying with empty tree:', err.message);
                 currentTree = await this.extractWithRetry({ version: 0, goals: [] }, chunk);
             }
+            onProgress?.(currentTree);
         }
         return currentTree;
     }
