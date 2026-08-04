@@ -9,6 +9,7 @@ import { LLMExtractionEngineImpl } from './core/extractor.js';
 import { isRefreshRequest, isWatchRequest, parseJsonLine } from './core/protocol.js';
 import { resolveSessionLogPath } from './core/paths.js';
 import { ProgressStoreImpl } from './core/store.js';
+import { buildTurnsFromLog } from './core/turns.js';
 import { FileLogWatcher } from './core/watcher.js';
 import type {
   LLMConfig,
@@ -106,11 +107,12 @@ export class ProgressServer {
   }
 
   private bindDetector(session: SessionState): void {
-    session.detector.onTrigger(async (segments) => {
+    session.detector.onTrigger(async () => {
       if (!this.extractor) return;
       this.setStatus(session.sessionId, 'syncing');
       try {
-        const updated = await this.extractor.extract(session.store.getState(), segments);
+        const turns = session.buffer.getTurns();
+        const updated = await this.extractor.extract(session.store.getState(), turns);
         session.store.setState(updated);
         this.setStatus(session.sessionId, 'idle');
       } catch (err) {
@@ -183,10 +185,10 @@ export class ProgressServer {
       status: 'idle',
     };
 
-   this.bindDetector(session);
-   session.store.subscribe((tree) =>
-     this.broadcast(realSessionId, { type: 'progress', tree }),
-   );
+    this.bindDetector(session);
+    session.store.subscribe((tree) =>
+      this.broadcast(realSessionId, { type: 'progress', tree }),
+    );
     session.store.subscribe(() => {
       try {
         session!.store.saveSnapshot(realSessionId);
@@ -246,6 +248,10 @@ export class ProgressServer {
       }
       if (req.method === 'POST' && url.pathname === '/refresh') {
         await this.handleRefresh(req, res);
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/turn') {
+        this.handleTurn(res, url);
         return;
       }
       if (req.method === 'GET' && url.pathname === '/debug') {
@@ -336,10 +342,11 @@ export class ProgressServer {
     }
     this.setStatus(sessionId, 'syncing');
     try {
-      const segments = session.buffer.getSegments(10);
-      const updated = await this.extractor.extract(session.store.getState(), segments);
-     session.store.setState(updated);
-     this.setStatus(sessionId, 'idle');
+      const logPath = session.watcher.getFilePath();
+      const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : session.buffer.getTurns();
+      const updated = await this.extractor.extract(session.store.getState(), turns);
+      session.store.setState(updated);
+      this.setStatus(sessionId, 'idle');
       try {
         session.store.saveSnapshot(sessionId);
       } catch (err) {
@@ -353,6 +360,33 @@ export class ProgressServer {
     const response = this.buildProgressResponse(session);
     res.writeHead(200);
     res.end(JSON.stringify(response));
+  }
+
+  private handleTurn(res: http.ServerResponse, url: URL): void {
+    const requestedSessionId = url.searchParams.get('sessionId');
+    const promptId = url.searchParams.get('promptId');
+    const sessionId = this.resolveSessionId(requestedSessionId ?? null) ?? this.getDefaultSessionId();
+    if (!sessionId || !promptId) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'Missing sessionId or promptId' }));
+      return;
+    }
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Session not found' }));
+      return;
+    }
+    const logPath = session.watcher.getFilePath();
+    const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : session.buffer.getTurns();
+    const turn = turns.find((t) => t.promptId === promptId);
+    if (!turn) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Turn not found' }));
+      return;
+    }
+    res.writeHead(200);
+    res.end(JSON.stringify(turn));
   }
 
   private handleDebug(res: http.ServerResponse, url: URL): void {
@@ -370,6 +404,7 @@ export class ProgressServer {
       return;
     }
     const logPath = session.watcher.getFilePath();
+    const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : [];
     res.writeHead(200);
     res.end(
       JSON.stringify({
@@ -380,7 +415,8 @@ export class ProgressServer {
         logExists: logPath ? fs.existsSync(logPath) : false,
         apiKeyConfigured: !!this.config.apiKey,
         model: this.config.model,
-        bufferSize: session.buffer.getSegments(200).length,
+        bufferSize: session.buffer.getTurns().length,
+        logTurnCount: turns.length,
         status: session.status,
         error: session.errorMessage,
       }),
