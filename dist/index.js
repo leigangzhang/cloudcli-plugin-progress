@@ -1462,6 +1462,8 @@ function ensureAssets() {
     .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 8px; margin: 0.5em 0; color: var(--pp-muted); }
     .pp-markdown table { border-collapse: collapse; margin: 0.5em 0; }
     .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 4px 8px; }
+    @keyframes pp-spin { to { transform: rotate(360deg); } }
+    .pp-spin { display: inline-flex; animation: pp-spin 1s linear infinite; }
   `;
   document.head.appendChild(style);
 }
@@ -1478,6 +1480,7 @@ function mount(container, api) {
   let turnExpanded = /* @__PURE__ */ new Set();
   let turnRecords = /* @__PURE__ */ new Map();
   let ws = null;
+  let isRefreshing = false;
   let currentProjectPath = null;
   let currentSessionId = null;
   let currentRealSessionId = null;
@@ -1501,11 +1504,15 @@ function mount(container, api) {
       root.innerHTML = renderError(colors, errorMessage ?? "Sync failed");
       return;
     }
+    const refreshLabel = isRefreshing ? "Refreshing..." : "Refresh";
+    const refreshDisabled = isRefreshing ? "opacity:0.6;cursor:not-allowed;" : "";
+    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
+    const iconClass = isRefreshing ? "pp-spin" : "";
     const header = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
-        <button id="pp-refresh" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;" onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'">
-          ${refreshIcon()} Refresh
+        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
         </button>
       </div>
     `;
@@ -1599,7 +1606,11 @@ function mount(container, api) {
       if (typed.type === "progress") {
         tree = msg.tree;
       } else if (typed.type === "status") {
-        status = msg.status;
+        const newStatus = msg.status;
+        if (status === "syncing" && (newStatus === "idle" || newStatus === "error")) {
+          isRefreshing = false;
+        }
+        status = newStatus;
         errorMessage = msg.error;
       }
       render();
@@ -1631,15 +1642,19 @@ function mount(container, api) {
   }
   async function refresh() {
     const sid = currentRealSessionId ?? currentSessionId;
-    if (!sid) return;
+    if (!sid || isRefreshing) return;
+    isRefreshing = true;
+    render();
     try {
       const res = await api.rpc("POST", "/refresh", { sessionId: sid });
       applyResponse(res);
     } catch (err) {
       status = "error";
       errorMessage = err.message;
+    } finally {
+      isRefreshing = false;
+      render();
     }
-    render();
   }
   currentProjectPath = api.context.project?.path ?? null;
   currentSessionId = api.context.session?.id ?? null;
