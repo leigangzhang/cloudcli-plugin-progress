@@ -36,16 +36,6 @@ function parseIntToken(value) {
         return undefined;
     return Math.round(parsed);
 }
-function parseBoolToken(value) {
-    if (!value)
-        return undefined;
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on')
-        return true;
-    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off')
-        return false;
-    return undefined;
-}
 function readSettingsEnv(settingsPath) {
     try {
         const raw = fs.readFileSync(settingsPath, 'utf-8');
@@ -89,7 +79,6 @@ function readEnvFile(basePath) {
             model: vars.PROGRESS_MODEL ?? vars.ANTHROPIC_MODEL ?? vars.MODEL,
             maxTokens: parseIntToken(vars.MAX_TOKENS ?? vars.PROGRESS_MAX_TOKENS ?? vars.ANTHROPIC_MAX_TOKENS),
             requestTimeoutMs: parseIntToken(vars.TIMEOUT_MS ?? vars.PROGRESS_TIMEOUT_MS ?? vars.ANTHROPIC_TIMEOUT_MS),
-            usePolling: parseBoolToken(vars.PROGRESS_USE_POLLING),
         };
     }
     catch {
@@ -139,9 +128,6 @@ export function loadConfig(options) {
             pluginEnv.maxTokens ??
             parseIntToken(env.PROGRESS_MAX_TOKENS) ??
             parseIntToken(env.ANTHROPIC_MAX_TOKENS),
-        usePolling: projectEnv.usePolling ??
-            pluginEnv.usePolling ??
-            parseBoolToken(env.PROGRESS_USE_POLLING),
     };
 }
 export function redactApiKey(value, apiKey) {
