@@ -1532,7 +1532,10 @@ function mount(container, api) {
     });
     root.querySelectorAll("[data-step-id]").forEach((el) => {
       const headerEl = el.querySelector(".pp-step-header");
-      headerEl?.addEventListener("click", () => void toggleStep(el));
+      headerEl?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void toggleStep(el);
+      });
     });
     const refreshBtn = root.querySelector("#pp-refresh");
     refreshBtn?.addEventListener("click", () => void refresh());
