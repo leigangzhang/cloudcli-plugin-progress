@@ -139,6 +139,7 @@ export interface LLMConfig {
   model: string;
   maxRetries?: number;
   requestTimeoutMs?: number;
+  maxTokens?: number;
 }
 
 export interface SessionLogWatcher {

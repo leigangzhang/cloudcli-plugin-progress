@@ -40,6 +40,12 @@ function normalizeHeaders(
   }
   return out;
 }
+function parseIntToken(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.round(parsed);
+}
 
 function readSettingsEnv(settingsPath: string): Partial<LLMConfig> {
   try {
@@ -81,6 +87,8 @@ function readEnvFile(basePath: string): Partial<LLMConfig> {
       apiKey: vars.ANTHROPIC_API_KEY ?? vars.ANTHROPIC_AUTH_TOKEN ?? vars.API_KEY,
       baseUrl: vars.ANTHROPIC_BASE_URL ?? vars.BASE_URL,
       model: vars.PROGRESS_MODEL ?? vars.ANTHROPIC_MODEL ?? vars.MODEL,
+      maxTokens: parseIntToken(vars.MAX_TOKENS ?? vars.PROGRESS_MAX_TOKENS ?? vars.ANTHROPIC_MAX_TOKENS),
+      requestTimeoutMs: parseIntToken(vars.TIMEOUT_MS ?? vars.PROGRESS_TIMEOUT_MS ?? vars.ANTHROPIC_TIMEOUT_MS),
     };
   } catch {
     return {};
@@ -130,7 +138,17 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
       headers['x-plugin-secret-anthropic-model'] ??
       DEFAULT_MODEL,
     maxRetries: 3,
-    requestTimeoutMs: 60_000,
+    requestTimeoutMs:
+      projectEnv.requestTimeoutMs ??
+      pluginEnv.requestTimeoutMs ??
+      parseIntToken(env.PROGRESS_TIMEOUT_MS) ??
+      parseIntToken(env.ANTHROPIC_TIMEOUT_MS) ??
+      60_000,
+    maxTokens:
+      projectEnv.maxTokens ??
+      pluginEnv.maxTokens ??
+      parseIntToken(env.PROGRESS_MAX_TOKENS) ??
+      parseIntToken(env.ANTHROPIC_MAX_TOKENS),
   };
 }
 

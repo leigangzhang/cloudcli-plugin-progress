@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LLMExtractionEngineImpl } from '../../src/core/extractor.js';
+import { LLMExtractionEngineImpl, summarizeTurns } from '../../src/core/extractor.js';
 import type { Anthropic } from '../../src/core/extractor.js';
 import type { ConversationTurn, LLMConfig, ProgressTree } from '../../src/core/types.js';
 
@@ -167,5 +167,44 @@ describe('LLMExtractionEngineImpl', () => {
     const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0].messages[0].content;
     expect(prompt).toContain('p1');
     expect(prompt).toContain('hello');
+  });
+  it('summarizeTurns truncates long text fields', () => {
+    const longText = 'a'.repeat(5000);
+    const turns: ConversationTurn[] = [
+      { promptId: 'p1', lineStart: 1, lineEnd: 2, userText: longText, timestamp: '2026-01-01T00:00:00Z' },
+    ];
+    const summarized = summarizeTurns(turns, 20, 2000);
+    expect(summarized[0].userText).toHaveLength(2000 + '\n...[truncated]'.length);
+    expect(summarized[0].userText).toContain('\n...[truncated]');
+  });
+  it('retries with only the last 5 turns when JSON parsing fails', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const turns: ConversationTurn[] = Array.from({ length: 10 }, (_, i) => ({
+      promptId: `p${i + 1}`,
+      lineStart: i * 2 + 1,
+      lineEnd: i * 2 + 2,
+      userText: `turn ${i + 1}`,
+      timestamp: '2026-01-01T00:00:00Z',
+    }));
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockRejectedValueOnce(new Error('No JSON object found in response'))
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [] }) }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          }),
+      },
+    } as unknown as Anthropic;
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, turns);
+    expect(result).toEqual({ version: 2, goals: [] });
+    expect(client.messages.create).toHaveBeenCalledTimes(2);
+    const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
+    expect(secondPrompt).toContain('"promptId": "p6"');
+    expect(secondPrompt).toContain('"promptId": "p10"');
+    expect(secondPrompt).not.toContain('"promptId": "p1"');
+    expect(secondPrompt).not.toContain('"promptId": "p5"');
   });
 });
