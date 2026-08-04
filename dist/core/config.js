@@ -28,6 +28,14 @@ function normalizeHeaders(headers) {
     }
     return out;
 }
+function parseIntToken(value) {
+    if (!value)
+        return undefined;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0)
+        return undefined;
+    return Math.round(parsed);
+}
 function readSettingsEnv(settingsPath) {
     try {
         const raw = fs.readFileSync(settingsPath, 'utf-8');
@@ -69,6 +77,8 @@ function readEnvFile(basePath) {
             apiKey: vars.ANTHROPIC_API_KEY ?? vars.ANTHROPIC_AUTH_TOKEN ?? vars.API_KEY,
             baseUrl: vars.ANTHROPIC_BASE_URL ?? vars.BASE_URL,
             model: vars.PROGRESS_MODEL ?? vars.ANTHROPIC_MODEL ?? vars.MODEL,
+            maxTokens: parseIntToken(vars.MAX_TOKENS ?? vars.PROGRESS_MAX_TOKENS ?? vars.ANTHROPIC_MAX_TOKENS),
+            requestTimeoutMs: parseIntToken(vars.TIMEOUT_MS ?? vars.PROGRESS_TIMEOUT_MS ?? vars.ANTHROPIC_TIMEOUT_MS),
         };
     }
     catch {
@@ -109,7 +119,15 @@ export function loadConfig(options) {
             headers['x-plugin-secret-anthropic-model'] ??
             DEFAULT_MODEL,
         maxRetries: 3,
-        requestTimeoutMs: 60000,
+        requestTimeoutMs: projectEnv.requestTimeoutMs ??
+            pluginEnv.requestTimeoutMs ??
+            parseIntToken(env.PROGRESS_TIMEOUT_MS) ??
+            parseIntToken(env.ANTHROPIC_TIMEOUT_MS) ??
+            60000,
+        maxTokens: projectEnv.maxTokens ??
+            pluginEnv.maxTokens ??
+            parseIntToken(env.PROGRESS_MAX_TOKENS) ??
+            parseIntToken(env.ANTHROPIC_MAX_TOKENS),
     };
 }
 export function redactApiKey(value, apiKey) {

@@ -26,7 +26,7 @@ function buildPrompt(tree: ProgressTree, turns: ConversationTurn[], strict = fal
 ${JSON.stringify(tree, null, 2)}
 
 Conversation Turns:
-${JSON.stringify(turns.slice(-20), null, 2)}`;
+${JSON.stringify(turns, null, 2)}`;
   if (strict) {
     return (
       base +
@@ -43,6 +43,27 @@ function extractJsonObject(text: string): string {
     throw new Error('No JSON object found in response');
   }
   return text.slice(start, end + 1);
+}
+export function summarizeTurns(
+  turns: ConversationTurn[],
+  turnLimit = 20,
+  maxFieldLength = 2000,
+): ConversationTurn[] {
+  return turns.slice(-turnLimit).map((turn) => ({
+    promptId: turn.promptId,
+    lineStart: turn.lineStart,
+    lineEnd: turn.lineEnd,
+    timestamp: turn.timestamp,
+    userText: truncateText(turn.userText, maxFieldLength),
+    thinkingText: truncateText(turn.thinkingText, maxFieldLength),
+    assistantText: truncateText(turn.assistantText, maxFieldLength),
+    toolText: truncateText(turn.toolText, maxFieldLength),
+  }));
+}
+function truncateText(text: string | undefined, maxLength: number): string | undefined {
+  if (!text) return undefined;
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '\n...[truncated]';
 }
 
 export class LLMExtractionEngineImpl implements LLMExtractionEngine {
@@ -64,10 +85,15 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
 
   async extract(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree> {
     try {
-      return await this.doExtract(tree, turns, false);
+      return await this.doExtract(tree, summarizeTurns(turns, 20), false);
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('No JSON object found in response')) {
+        // Prompt likely too large; retry with only the last 5 summarized turns.
+        return await this.doExtract(tree, summarizeTurns(turns, 5), true);
+      }
       // Retry once with a stricter prompt before giving up.
-      return await this.doExtract(tree, turns, true);
+      return await this.doExtract(tree, summarizeTurns(turns, 20), true);
     }
   }
 
@@ -88,7 +114,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
   ): Promise<ProgressTree> {
     const response = await this.client.messages.create({
       model: this.config.model,
-      max_tokens: 4096,
+      max_tokens: this.config.maxTokens ?? 4096,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildPrompt(tree, turns, strict) }],
     });

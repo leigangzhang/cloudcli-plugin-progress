@@ -267,4 +267,32 @@ describe('loadConfig', () => {
       }),
     ).toThrow(/Anthropic API key/);
   });
+  it('reads MAX_TOKENS and TIMEOUT_MS from .env', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nMAX_TOKENS=8192\nTIMEOUT_MS=120000',
+      'utf-8',
+    );
+
+    const config = loadConfig({ pluginRoot });
+    expect(config.maxTokens).toBe(8192);
+    expect(config.requestTimeoutMs).toBe(120000);
+    tmp.cleanup();
+  });
+  it('falls back to PROGRESS_/ANTHROPIC_ variants for max tokens and timeout', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nPROGRESS_MAX_TOKENS=16384\nANTHROPIC_TIMEOUT_MS=90000',
+      'utf-8',
+    );
+
+    const config = loadConfig({ pluginRoot });
+    expect(config.maxTokens).toBe(16384);
+    expect(config.requestTimeoutMs).toBe(90000);
+    tmp.cleanup();
+  });
 });
