@@ -25,8 +25,43 @@ ${JSON.stringify(turns, null, 2)}`;
 }
 function extractJsonObject(text) {
     const start = text.indexOf('{');
+    if (start === -1) {
+        throw new Error('No JSON object found in response');
+    }
+    // Find the outermost balanced JSON object instead of relying on the first
+    // and last braces. This handles responses that contain multiple objects or
+    // trailing text after the main object.
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < text.length; i++) {
+        const char = text[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (char === '\\' && inString) {
+            escaped = true;
+            continue;
+        }
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (inString)
+            continue;
+        if (char === '{')
+            depth++;
+        else if (char === '}') {
+            depth--;
+            if (depth === 0) {
+                return text.slice(start, i + 1);
+            }
+        }
+    }
+    // Fallback to the old heuristic if no balanced object was found.
     const end = text.lastIndexOf('}');
-    if (start === -1 || end === -1 || end < start) {
+    if (end === -1 || end < start) {
         throw new Error('No JSON object found in response');
     }
     return text.slice(start, end + 1);
@@ -79,8 +114,11 @@ export class LLMExtractionEngineImpl {
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            if (message.includes('No JSON object found in response')) {
-                // Prompt likely too large; retry with only the last 5 summarized turns.
+            if (message.includes('No JSON object found in response') ||
+                message.includes('JSON') ||
+                message.includes('SyntaxError')) {
+                // Prompt likely too large or model returned malformed JSON; retry with
+                // only the last 5 summarized turns and a stricter prompt.
                 return await this.doExtract(tree, summarizeTurns(turns, 5), true);
             }
             // Retry once with a stricter prompt before giving up.
