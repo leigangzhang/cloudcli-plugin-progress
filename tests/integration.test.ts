@@ -30,6 +30,27 @@ function collectMessages(ws: WebSocket): unknown[] {
   return messages;
 }
 
+function mockTree(): ProgressTree {
+  return {
+    version: 1,
+    goals: [
+      {
+        id: 'g-integrated',
+        subject: 'Integrated goal',
+        status: 'in_progress',
+        steps: [
+          {
+            id: 's-integrated',
+            subject: 'Integrated step',
+            status: 'completed',
+            promptId: 'p-integrated',
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe('ProgressServer end-to-end', () => {
   let server: ProgressServer;
   let port: number;
@@ -39,17 +60,7 @@ describe('ProgressServer end-to-end', () => {
   beforeAll(async () => {
     tmp = createTempDir();
     mockExtractor = {
-      extract: vi.fn().mockResolvedValue({
-        version: 1,
-        goals: [
-          {
-            id: 'g-integrated',
-            subject: 'Integrated goal',
-            status: 'in_progress',
-            steps: [{ id: 's-integrated', subject: 'Integrated step', status: 'completed' }],
-          },
-        ],
-      }),
+      extract: vi.fn().mockResolvedValue(mockTree()),
       onUsage: vi.fn().mockReturnValue(() => {}),
     } as unknown as LLMExtractionEngine;
     server = new ProgressServer({
@@ -77,7 +88,7 @@ describe('ProgressServer end-to-end', () => {
 
     writeJsonl(logFile, [
       { type: 'system', uuid: 's0' },
-      { type: 'user', uuid: 'u1', content: [{ type: 'text', text: 'Hello' }] },
+      { type: 'user', uuid: 'u1', promptId: 'p1', content: [{ type: 'text', text: 'Hello' }] },
     ]);
 
     const { status, data } = await fetchJson(port, 'POST', '/watch', { projectPath, sessionId });
@@ -88,6 +99,7 @@ describe('ProgressServer end-to-end', () => {
       {
         type: 'assistant',
         uuid: 'a1',
+        parentUuid: 'u1',
         promptId: 'p1',
         content: [{ type: 'thinking', thinking: 'I need to plan the implementation.' }],
         stopReason: 'end_turn',
@@ -121,7 +133,7 @@ describe('ProgressServer end-to-end', () => {
     });
 
     const messages = collectMessages(ws);
-    ws.send(JSON.stringify({ type: 'subscribe' }));
+    ws.send(JSON.stringify({ type: 'subscribe', projectPath, sessionId }));
     await wait(200);
 
     expect(messages.length).toBeGreaterThanOrEqual(2);
@@ -162,7 +174,7 @@ describe('ProgressServer end-to-end', () => {
     expect((before.data as { tree: { goals: unknown[] } }).tree.goals).toEqual([]);
 
     appendJsonl(logFile, [
-      { type: 'user', uuid: 'u3', content: [{ type: 'text', text: 'Do it' }] },
+      { type: 'user', uuid: 'u3', promptId: 'p3', content: [{ type: 'text', text: 'Do it' }] },
     ]);
     await wait(50);
 
