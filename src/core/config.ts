@@ -15,10 +15,16 @@ export interface ConfigOptions {
 const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022';
 
 function getPluginRoot(): string {
+  const cwd = process.cwd();
+  // CloudCLI usually starts the plugin server with cwd set to the plugin install
+  // directory. If a .env exists there, prefer it over the computed module path.
+  if (fs.existsSync(path.join(cwd, '.env'))) {
+    return cwd;
+  }
   try {
     return path.resolve(fileURLToPath(import.meta.url), '..', '..');
   } catch {
-    return process.cwd();
+    return cwd;
   }
 }
 
