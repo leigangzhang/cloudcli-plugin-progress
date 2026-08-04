@@ -1,6 +1,7 @@
 import type { LLMConfig } from './types.js';
 export interface ConfigOptions {
     projectPath?: string;
+    pluginRoot?: string;
     settingsPath?: string;
     env?: NodeJS.ProcessEnv;
     headers?: Record<string, string | string[] | undefined>;
