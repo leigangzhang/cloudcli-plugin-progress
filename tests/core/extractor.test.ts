@@ -326,4 +326,72 @@ describe('LLMExtractionEngineImpl', () => {
     expect(secondPrompt).toContain('"promptId": "p6"');
     expect(secondPrompt).not.toContain('"promptId": "p1"');
   });
+
+  it('retries a failed chunk in polling mode before giving up', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const turns: ConversationTurn[] = Array.from({ length: 6 }, (_, i) => ({
+      promptId: `p${i + 1}`,
+      lineStart: i * 2 + 1,
+      lineEnd: i * 2 + 2,
+      userText: `turn ${i + 1}`,
+      timestamp: '2026-01-01T00:00:00Z',
+    }));
+    const treeAfterFirstChunk: ProgressTree = {
+      version: 2,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Topic A',
+          status: 'in_progress',
+          steps: Array.from({ length: 5 }, (_, i) => ({
+            id: `s${i + 1}`,
+            subject: `Step ${i + 1}`,
+            status: 'completed',
+            promptId: `p${i + 1}`,
+          })),
+        },
+      ],
+    };
+    const treeAfterSecondChunk: ProgressTree = {
+      version: 3,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Topic A',
+          status: 'in_progress',
+          steps: Array.from({ length: 5 }, (_, i) => ({
+            id: `s${i + 1}`,
+            subject: `Step ${i + 1}`,
+            status: 'completed',
+            promptId: `p${i + 1}`,
+          })),
+        },
+        {
+          id: 'g2',
+          subject: 'Topic B',
+          status: 'pending',
+          steps: [{ id: 's6', subject: 'Step 6', status: 'pending', promptId: 'p6' }],
+        },
+      ],
+    };
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: JSON.stringify(treeAfterFirstChunk) }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockRejectedValueOnce(new Error('No JSON object found in response'))
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: JSON.stringify(treeAfterSecondChunk) }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          }),
+      },
+    } as unknown as Anthropic;
+    const engine = new LLMExtractionEngineImpl({ config: mockPollingConfig(), client });
+    const result = await engine.extract(tree, turns);
+    expect(client.messages.create).toHaveBeenCalledTimes(3);
+    expect(result.goals.length).toBe(2);
+  });
 });
