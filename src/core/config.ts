@@ -1,16 +1,26 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { LLMConfig } from './types.js';
 
 export interface ConfigOptions {
   projectPath?: string;
+  pluginRoot?: string;
   settingsPath?: string;
   env?: NodeJS.ProcessEnv;
   headers?: Record<string, string | string[] | undefined>;
 }
 
 const DEFAULT_MODEL = 'claude-3-5-sonnet-20241022';
+
+function getPluginRoot(): string {
+  try {
+    return path.resolve(fileURLToPath(import.meta.url), '..', '..');
+  } catch {
+    return process.cwd();
+  }
+}
 
 function normalizeHeaders(
   headers?: Record<string, string | string[] | undefined>,
@@ -40,8 +50,8 @@ function readSettingsEnv(settingsPath: string): Partial<LLMConfig> {
   }
 }
 
-function readProjectEnv(projectPath: string): Partial<LLMConfig> {
-  const envPath = path.join(projectPath, '.env');
+function readEnvFile(basePath: string): Partial<LLMConfig> {
+  const envPath = path.join(basePath, '.env');
   if (!fs.existsSync(envPath)) return {};
   try {
     const raw = fs.readFileSync(envPath, 'utf-8');
@@ -72,7 +82,9 @@ function readProjectEnv(projectPath: string): Partial<LLMConfig> {
 }
 
 export function loadConfig(options?: ConfigOptions): LLMConfig {
-  const projectEnv = options?.projectPath ? readProjectEnv(options.projectPath) : {};
+  const projectEnv = options?.projectPath ? readEnvFile(options.projectPath) : {};
+  const pluginRoot = options?.pluginRoot ?? getPluginRoot();
+  const pluginEnv = readEnvFile(pluginRoot);
   const settingsPath = options?.settingsPath ?? path.join(os.homedir(), '.claude', 'settings.json');
   const env = options?.env ?? process.env;
   const headers = normalizeHeaders(options?.headers);
@@ -81,6 +93,7 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
 
   const apiKey =
     projectEnv.apiKey ??
+    pluginEnv.apiKey ??
     settings.apiKey ??
     env.ANTHROPIC_API_KEY ??
     env.ANTHROPIC_AUTH_TOKEN ??
@@ -89,7 +102,7 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
 
   if (!apiKey) {
     throw new Error(
-      'Missing Anthropic API key. Set ANTHROPIC_API_KEY in project .env, ~/.claude/settings.json, environment variables, or X-Plugin-Secret headers.',
+      'Missing Anthropic API key. Set ANTHROPIC_API_KEY in project .env, plugin .env, ~/.claude/settings.json, environment variables, or X-Plugin-Secret headers.',
     );
   }
 
@@ -97,11 +110,13 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
     apiKey,
     baseUrl:
       projectEnv.baseUrl ??
+      pluginEnv.baseUrl ??
       settings.baseUrl ??
       env.ANTHROPIC_BASE_URL ??
       headers['x-plugin-secret-anthropic-base-url'],
     model:
       projectEnv.model ??
+      pluginEnv.model ??
       settings.model ??
       env.PROGRESS_MODEL ??
       env.ANTHROPIC_MODEL ??

@@ -43,6 +43,78 @@ describe('loadConfig', () => {
     tmp.cleanup();
   });
 
+  it('reads API key, base URL and model from plugin .env', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nANTHROPIC_BASE_URL=https://plugin.example\nPROGRESS_MODEL=plugin-model',
+      'utf-8',
+    );
+
+    const config = loadConfig({ pluginRoot });
+    expect(config.apiKey).toBe('plugin-token');
+    expect(config.baseUrl).toBe('https://plugin.example');
+    expect(config.model).toBe('plugin-model');
+    tmp.cleanup();
+  });
+
+  it('project .env overrides plugin .env', () => {
+    const tmp = createTempDir();
+    const projectPath = path.join(tmp.path, 'project');
+    const pluginRoot = path.join(tmp.path, 'plugin');
+    fs.mkdirSync(projectPath, { recursive: true });
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectPath, '.env'),
+      'ANTHROPIC_API_KEY=project-token\nPROGRESS_MODEL=project-model',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nPROGRESS_MODEL=plugin-model',
+      'utf-8',
+    );
+
+    const config = loadConfig({ projectPath, pluginRoot });
+    expect(config.apiKey).toBe('project-token');
+    expect(config.model).toBe('project-model');
+    tmp.cleanup();
+  });
+
+  it('plugin .env overrides settings.json and environment variables', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    const settingsPath = path.join(tmp.path, 'settings.json');
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nPROGRESS_MODEL=plugin-model',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          ANTHROPIC_API_KEY: 'settings-token',
+          PROGRESS_MODEL: 'settings-model',
+        },
+      }),
+      'utf-8',
+    );
+
+    const config = loadConfig({
+      pluginRoot,
+      settingsPath,
+      env: {
+        ANTHROPIC_API_KEY: 'env-token',
+        PROGRESS_MODEL: 'env-model',
+      },
+    });
+    expect(config.apiKey).toBe('plugin-token');
+    expect(config.model).toBe('plugin-model');
+    tmp.cleanup();
+  });
+
   it('project .env overrides settings.json and environment variables', () => {
     const tmp = createTempDir();
     const projectPath = tmp.path;
@@ -148,7 +220,7 @@ describe('loadConfig', () => {
     expect(config.model).toBe('header-model');
   });
 
-  it('prefers settings.json over env and headers when no project .env', () => {
+  it('prefers settings.json over env and headers when no project or plugin .env', () => {
     const tmp = createTempDir();
     const settingsPath = path.join(tmp.path, 'settings.json');
     fs.writeFileSync(
