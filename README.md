@@ -13,6 +13,7 @@ CloudCLI 标签页插件，自动从 Claude Code CLI 会话日志中提取并可
 - **实时同步**：通过 `fs.watch` 增量读取会话日志，新消息到达后自动触发提取并推送到 UI。
 - **LLM 智能提取**：调用 LLM 将对话轮次转换为结构化的 ProgressTree，自动跟随用户主要语言，不限制 subject/description 长度。
 - **大会话降级**：当单轮文本过长导致模型无法返回 JSON 时，自动截断每轮文本并降级到最近 5 轮重试。
+- **大会话轮询提取**：通过 `PROGRESS_USE_POLLING=true` 开启，把长会话按每 5 轮分组独立提取，再由 LLM 归类合并相似 Goal（即使主题不连续也会合并）。
 - **快照持久化**：每次提取完成后自动保存快照，CloudCLI/插件重启后优先加载已有进度并继续增量更新。
 - **WebSocket 实时推送**：Progress 和状态变化通过 WebSocket 推送到 UI，无需轮询。
 - **深浅色主题**：自动适配 CloudCLI 主题。
@@ -48,6 +49,7 @@ CloudCLI 标签页插件，自动从 Claude Code CLI 会话日志中提取并可
 | `PROGRESS_MODEL` / `ANTHROPIC_MODEL` / `MODEL` | 可选 | 提取模型，默认 `claude-3-5-sonnet-20241022` |
 | `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | 可选 | 每次提取的最大输出 token，默认 `4096` |
 | `TIMEOUT_MS` / `PROGRESS_TIMEOUT_MS` / `ANTHROPIC_TIMEOUT_MS` | 可选 | LLM 请求超时（毫秒），默认 `60000` |
+| `PROGRESS_USE_POLLING` | 可选 | 是否开启轮询分块提取（大会话），默认 `false` |
 
 ### 插件目录 `.env` 示例
 
@@ -57,6 +59,7 @@ ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ANTHROPIC_MODEL=deepseek-v4-flash
 MAX_TOKENS=8192
 TIMEOUT_MS=120000
+PROGRESS_USE_POLLING=true
 ```
 
 ## 开发
@@ -140,7 +143,9 @@ npm run dev
   - 确认会话日志文件存在，路径可通过 `/debug?sessionId=...` 查看。
   - 检查 CloudCLI 的 Progress 标签页网络请求，确认 WebSocket `/ws` 已连接并收到 `subscribe` 响应。
 - **同步出错**：UI 会展示错误信息。可调用 `/debug` 查看详情；错误日志中 API Key 会被脱敏。
-- **大会话提取失败**：插件会自动截断文本并降级到最近 5 轮重试。如仍失败，可增大 `.env` 中的 `MAX_TOKENS` 或缩短会话。
+- **大会话提取失败**：
+  - 默认策略：自动截断文本并降级到最近 5 轮重试。
+  - 轮询策略：在 `.env` 中设置 `PROGRESS_USE_POLLING=true`，插件会把会话切成每 5 轮一组独立提取，再让 LLM 归类合并相似 Goal。
 - **WebSocket 不更新**：确保插件 server 已启动（日志输出 `{ "ready": true, "port": ... }`），且 `subscribe` 消息中的 `sessionId` 正确。
 
 ## License

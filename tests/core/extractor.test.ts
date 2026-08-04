@@ -25,6 +25,14 @@ function mockClient(response: { text: string; inputTokens?: number; outputTokens
   } as unknown as Anthropic;
 }
 
+function mockPollingConfig(): LLMConfig {
+  return {
+    apiKey: 'test-key',
+    baseUrl: 'https://test.example',
+    model: 'test-model',
+    usePolling: true,
+  };
+}
 describe('LLMExtractionEngineImpl', () => {
   it('extracts progress tree from API response', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
@@ -206,5 +214,160 @@ describe('LLMExtractionEngineImpl', () => {
     expect(secondPrompt).toContain('"promptId": "p10"');
     expect(secondPrompt).not.toContain('"promptId": "p1"');
     expect(secondPrompt).not.toContain('"promptId": "p5"');
+  });
+
+  it('uses polling mode to extract 5-turn chunks and merge them', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const turns: ConversationTurn[] = Array.from({ length: 6 }, (_, i) => ({
+      promptId: `p${i + 1}`,
+      lineStart: i * 2 + 1,
+      lineEnd: i * 2 + 2,
+      userText: `turn ${i + 1}`,
+      timestamp: '2026-01-01T00:00:00Z',
+    }));
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  version: 1,
+                  goals: [
+                    {
+                      id: 'g1',
+                      subject: 'Topic A',
+                      status: 'in_progress',
+                      steps: Array.from({ length: 5 }, (_, i) => ({
+                        id: `s${i + 1}`,
+                        subject: `Step ${i + 1}`,
+                        status: 'completed',
+                        promptId: `p${i + 1}`,
+                      })),
+                    },
+                  ],
+                }),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  version: 1,
+                  goals: [
+                    {
+                      id: 'g2',
+                      subject: 'Topic B',
+                      status: 'in_progress',
+                      steps: [{ id: 's6', subject: 'Step 6', status: 'pending', promptId: 'p6' }],
+                    },
+                  ],
+                }),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  version: 2,
+                  goals: [
+                    {
+                      id: 'g1',
+                      subject: 'Topic A',
+                      status: 'in_progress',
+                      steps: Array.from({ length: 5 }, (_, i) => ({
+                        id: `s${i + 1}`,
+                        subject: `Step ${i + 1}`,
+                        status: 'completed',
+                        promptId: `p${i + 1}`,
+                      })),
+                    },
+                    {
+                      id: 'g2',
+                      subject: 'Topic B',
+                      status: 'in_progress',
+                      steps: [{ id: 's6', subject: 'Step 6', status: 'pending', promptId: 'p6' }],
+                    },
+                  ],
+                }),
+              },
+            ],
+            usage: { input_tokens: 20, output_tokens: 10 },
+          }),
+      },
+    } as unknown as Anthropic;
+    const engine = new LLMExtractionEngineImpl({ config: mockPollingConfig(), client });
+    const result = await engine.extract(tree, turns);
+    expect(client.messages.create).toHaveBeenCalledTimes(3);
+    expect(result.goals.length).toBe(2);
+    expect(result.goals[0].steps?.length).toBe(5);
+    expect(result.goals[1].steps?.length).toBe(1);
+  });
+  it('falls back to concatenation when polling merge fails', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const turns: ConversationTurn[] = Array.from({ length: 6 }, (_, i) => ({
+      promptId: `p${i + 1}`,
+      lineStart: i * 2 + 1,
+      lineEnd: i * 2 + 2,
+      userText: `turn ${i + 1}`,
+      timestamp: '2026-01-01T00:00:00Z',
+    }));
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  version: 1,
+                  goals: [
+                    {
+                      id: 'g1',
+                      subject: 'Topic A',
+                      status: 'in_progress',
+                      steps: [{ id: 's1', subject: 'Step 1', status: 'completed', promptId: 'p1' }],
+                    },
+                  ],
+                }),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  version: 1,
+                  goals: [
+                    {
+                      id: 'g2',
+                      subject: 'Topic B',
+                      status: 'in_progress',
+                      steps: [{ id: 's2', subject: 'Step 2', status: 'pending', promptId: 'p6' }],
+                    },
+                  ],
+                }),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockRejectedValueOnce(new Error('merge failed')),
+      },
+    } as unknown as Anthropic;
+    const engine = new LLMExtractionEngineImpl({ config: mockPollingConfig(), client });
+    const result = await engine.extract(tree, turns);
+    expect(client.messages.create).toHaveBeenCalledTimes(3);
+    expect(result.goals.length).toBe(2);
   });
 });
