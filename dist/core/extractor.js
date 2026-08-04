@@ -50,6 +50,13 @@ function truncateText(text, maxLength) {
         return text;
     return text.slice(0, maxLength) + '\n...[truncated]';
 }
+function chunkTurns(turns, size) {
+    const chunks = [];
+    for (let i = 0; i < turns.length; i += size) {
+        chunks.push(turns.slice(i, i + size));
+    }
+    return chunks;
+}
 export class LLMExtractionEngineImpl {
     constructor(options) {
         this.usageListeners = [];
@@ -64,6 +71,9 @@ export class LLMExtractionEngineImpl {
                 });
     }
     async extract(tree, turns) {
+        if (this.config.usePolling && turns.length > 5) {
+            return this.extractByPolling(tree, turns);
+        }
         try {
             return await this.doExtract(tree, summarizeTurns(turns, 20), false);
         }
@@ -76,6 +86,15 @@ export class LLMExtractionEngineImpl {
             // Retry once with a stricter prompt before giving up.
             return await this.doExtract(tree, summarizeTurns(turns, 20), true);
         }
+    }
+    async extractByPolling(tree, turns) {
+        const chunkSize = 5;
+        const chunks = chunkTurns(turns, chunkSize);
+        let currentTree = tree;
+        for (const chunk of chunks) {
+            currentTree = await this.doExtract(currentTree, summarizeTurns(chunk, chunkSize), false);
+        }
+        return currentTree;
     }
     onUsage(callback) {
         this.usageListeners.push(callback);

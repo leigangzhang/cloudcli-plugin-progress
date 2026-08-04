@@ -281,6 +281,19 @@ describe('loadConfig', () => {
     expect(config.requestTimeoutMs).toBe(120000);
     tmp.cleanup();
   });
+  it('reads PROGRESS_USE_POLLING from .env', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nPROGRESS_USE_POLLING=true',
+      'utf-8',
+    );
+
+    const config = loadConfig({ pluginRoot });
+    expect(config.usePolling).toBe(true);
+    tmp.cleanup();
+  });
   it('falls back to PROGRESS_/ANTHROPIC_ variants for max tokens and timeout', () => {
     const tmp = createTempDir();
     const pluginRoot = tmp.path;
