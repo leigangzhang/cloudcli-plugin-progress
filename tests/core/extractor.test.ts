@@ -285,4 +285,45 @@ describe('LLMExtractionEngineImpl', () => {
     expect(secondPrompt).toContain('Topic A');
     expect(secondPrompt).toContain('"promptId": "p6"');
   });
+
+  it('extracts the outermost JSON object when the response contains trailing text', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const client = mockClient({
+      text: 'Here is the result:\n{"version":2,"goals":[]}\nHope this helps!',
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, []);
+    expect(result).toEqual({ version: 2, goals: [] });
+  });
+  it('retries with the last 5 turns when the response contains malformed JSON', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const turns: ConversationTurn[] = Array.from({ length: 10 }, (_, i) => ({
+      promptId: `p${i + 1}`,
+      lineStart: i * 2 + 1,
+      lineEnd: i * 2 + 2,
+      userText: `turn ${i + 1}`,
+      timestamp: '2026-01-01T00:00:00Z',
+    }));
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: '{"version":2,"goals":[' }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [] }) }],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          }),
+      },
+    } as unknown as Anthropic;
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, turns);
+    expect(result).toEqual({ version: 2, goals: [] });
+    expect(client.messages.create).toHaveBeenCalledTimes(2);
+    const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
+    expect(secondPrompt).toContain('"promptId": "p6"');
+    expect(secondPrompt).not.toContain('"promptId": "p1"');
+  });
 });
