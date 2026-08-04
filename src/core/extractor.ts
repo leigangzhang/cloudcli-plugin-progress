@@ -125,11 +125,17 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       });
   }
 
-  async extract(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree> {
+  async extract(
+    tree: ProgressTree,
+    turns: ConversationTurn[],
+    onProgress?: (tree: ProgressTree) => void,
+  ): Promise<ProgressTree> {
     if (this.config.usePolling && turns.length > 5) {
-      return this.extractByPolling(tree, turns);
+      return this.extractByPolling(tree, turns, onProgress);
     }
-    return this.extractWithRetry(tree, turns);
+    const result = await this.extractWithRetry(tree, turns);
+    onProgress?.(result);
+    return result;
   }
 
   private async extractWithRetry(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree> {
@@ -150,7 +156,11 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       return await this.doExtract(tree, summarizeTurns(turns, 20), true);
     }
   }
-  private async extractByPolling(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree> {
+  private async extractByPolling(
+    tree: ProgressTree,
+    turns: ConversationTurn[],
+    onProgress?: (tree: ProgressTree) => void,
+  ): Promise<ProgressTree> {
     const chunkSize = 5;
     const chunks = chunkTurns(turns, chunkSize);
     let currentTree = tree;
@@ -163,6 +173,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         console.warn('Chunk extraction failed with accumulated tree, retrying with empty tree:', (err as Error).message);
         currentTree = await this.extractWithRetry({ version: 0, goals: [] }, chunk);
       }
+      onProgress?.(currentTree);
     }
     return currentTree;
   }

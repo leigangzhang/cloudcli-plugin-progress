@@ -11,7 +11,7 @@ export declare class LLMExtractionEngineImpl implements LLMExtractionEngine {
     private config;
     private usageListeners;
     constructor(options: LLMExtractionEngineOptions);
-    extract(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree>;
+    extract(tree: ProgressTree, turns: ConversationTurn[], onProgress?: (tree: ProgressTree) => void): Promise<ProgressTree>;
     private extractWithRetry;
     private extractByPolling;
     onUsage(callback: (usage: {

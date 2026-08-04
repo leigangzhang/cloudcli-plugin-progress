@@ -364,7 +364,13 @@ export class ProgressServer {
     try {
       const logPath = session.watcher.getFilePath();
       const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : session.buffer.getTurns();
-      const updated = await extractor.extract(session.store.getState(), turns);
+      const updated = await extractor.extract(
+        session.store.getState(),
+        turns,
+        (progressTree) => {
+          session!.store.setState(progressTree);
+        },
+      );
       session.store.setState(updated);
       this.setStatus(sessionId, 'idle');
       try {
