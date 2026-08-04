@@ -137,7 +137,6 @@ export interface LLMConfig {
     maxRetries?: number;
     requestTimeoutMs?: number;
     maxTokens?: number;
-    usePolling?: boolean;
 }
 export interface SessionLogWatcher {
     start(projectPath: string, sessionId: string): Promise<void>;

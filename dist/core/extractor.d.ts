@@ -16,8 +16,6 @@ export declare class LLMExtractionEngineImpl implements LLMExtractionEngine {
         inputTokens: number;
         outputTokens: number;
     }) => void): () => void;
-    private extractByPolling;
     private doExtract;
-    private doMerge;
 }
 //# sourceMappingURL=extractor.d.ts.map
