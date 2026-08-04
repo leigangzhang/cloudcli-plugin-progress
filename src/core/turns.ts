@@ -39,15 +39,24 @@ function buildTurn(items: LogEntryWithLine[]): ConversationTurn {
   const userTexts: string[] = [];
   const thinkingTexts: string[] = [];
   const assistantTexts: string[] = [];
+  const toolTexts: string[] = [];
   let timestamp = '';
+  let firstUserProcessed = false;
 
   for (const { entry } of items) {
     if (entry.timestamp && entry.timestamp > timestamp) timestamp = entry.timestamp;
     const blocks = entry.content ?? entry.message?.content ?? [];
     if (entry.type === 'user') {
-      for (const block of blocks) {
-        if (block.type === 'text') userTexts.push(block.text);
-        else if (block.type === 'tool_result') userTexts.push(extractText(block.content));
+      if (!firstUserProcessed) {
+        for (const block of blocks) {
+          if (block.type === 'text') userTexts.push(block.text);
+        }
+        firstUserProcessed = true;
+      } else {
+        for (const block of blocks) {
+          if (block.type === 'tool_result') toolTexts.push(extractText(block.content));
+          else if (block.type === 'text') toolTexts.push(block.text);
+        }
       }
     } else if (entry.type === 'assistant') {
       for (const block of blocks) {
@@ -64,6 +73,7 @@ function buildTurn(items: LogEntryWithLine[]): ConversationTurn {
     userText: userTexts.join('\n').trim() || undefined,
     thinkingText: thinkingTexts.join('\n').trim() || undefined,
     assistantText: assistantTexts.join('\n').trim() || undefined,
+    toolText: toolTexts.join('\n').trim() || undefined,
     timestamp,
   };
 }

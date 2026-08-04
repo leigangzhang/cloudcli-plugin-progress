@@ -21,6 +21,8 @@ export declare class ProgressServer {
         port: number;
     }>;
     stop(): Promise<void>;
+    private chooseExtractor;
+    private createSessionExtractor;
     private bindDetector;
     private migrateClients;
     private getOrCreateSession;

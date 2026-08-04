@@ -178,13 +178,15 @@ describe('ProgressServer without API key', () => {
     await server.stop();
   });
 
-  it('watch endpoint returns 503 when API key is missing', async () => {
+  it('watch endpoint returns 200 and reports missing key in status', async () => {
     const { status, data } = await fetchJson(port, 'POST', '/watch', {
       projectPath: '/tmp',
       sessionId: 'sess-no-key',
     });
-    expect(status).toBe(503);
-    expect((data as { error?: string }).error).toMatch(/Missing Anthropic API key|Missing API key/);
+    expect(status).toBe(200);
+    const response = data as { status: string; error?: string };
+    expect(response.status).toBe('error');
+    expect(response.error).toMatch(/Missing API key/);
   });
 });
 

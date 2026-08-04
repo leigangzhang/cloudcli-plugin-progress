@@ -37,6 +37,7 @@ interface SessionState {
   buffer: ConversationBuffer;
   detector: DiffDetectorImpl;
   store: ProgressStoreImpl;
+  extractor?: LLMExtractionEngine;
   status: ProgressResponse['status'];
   errorMessage?: string;
 }
@@ -80,6 +81,7 @@ export class ProgressServer {
       this.httpServer = http.createServer((req, res) => void this.handleHttp(req, res));
       this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
       this.wss.on('connection', (ws) => this.handleWs(ws));
+      this.httpServer.on('error', reject);
       this.httpServer.listen(this.options.port ?? 0, '127.0.0.1', () => {
         const addr = this.httpServer?.address();
         if (addr && typeof addr !== 'string') {
@@ -106,18 +108,35 @@ export class ProgressServer {
     });
   }
 
+  private chooseExtractor(session: SessionState): LLMExtractionEngine | undefined {
+    return session.extractor ?? this.extractor;
+  }
+
+  private createSessionExtractor(session: SessionState): void {
+    try {
+      const sessionConfig = loadConfig({ projectPath: session.projectPath });
+      session.extractor = new LLMExtractionEngineImpl({ config: sessionConfig });
+    } catch {
+      // Project .env is either missing or incomplete. Fall back to the server-level
+      // extractor if it exists; otherwise leave session.extractor undefined so the
+      // UI gets a clear error when trying to refresh.
+    }
+  }
+
   private bindDetector(session: SessionState): void {
     session.detector.onTrigger(async () => {
-      if (!this.extractor) return;
+      const extractor = this.chooseExtractor(session);
+      if (!extractor) return;
       this.setStatus(session.sessionId, 'syncing');
       try {
         const turns = session.buffer.getTurns();
-        const updated = await this.extractor.extract(session.store.getState(), turns);
+        const updated = await extractor.extract(session.store.getState(), turns);
         session.store.setState(updated);
         this.setStatus(session.sessionId, 'idle');
       } catch (err) {
         const message = (err as Error).message;
-        console.error('Extraction failed:', redactApiKey(message, this.config.apiKey));
+        const apiKey = session.extractor ? this.config.apiKey : this.config.apiKey;
+        console.error('Extraction failed:', redactApiKey(message, apiKey));
         this.setStatus(session.sessionId, 'error', message);
       }
     });
@@ -154,6 +173,8 @@ export class ProgressServer {
       session.cloudcliSessionId = cloudcliSessionId;
       if (projectPath && session.projectPath !== projectPath) {
         session.projectPath = projectPath;
+        session.extractor = undefined;
+        this.createSessionExtractor(session);
         session.watcher.stop();
         session.watcher = new FileLogWatcher({ projectsDir: this.options.projectsDir });
         session.watcher.onLine((entry: LogEntry) => {
@@ -185,6 +206,7 @@ export class ProgressServer {
       status: 'idle',
     };
 
+    this.createSessionExtractor(session);
     this.bindDetector(session);
     session.store.subscribe((tree) =>
       this.broadcast(realSessionId, { type: 'progress', tree }),
@@ -274,11 +296,6 @@ export class ProgressServer {
   }
 
   private async handleWatch(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    if (!this.config.apiKey) {
-      res.writeHead(503);
-      res.end(JSON.stringify({ error: 'Missing API key' }));
-      return;
-    }
     const body = parseJsonLine(await readBody(req));
     if (!isWatchRequest(body)) {
       res.writeHead(400);
@@ -286,6 +303,13 @@ export class ProgressServer {
       return;
     }
     const session = await this.getOrCreateSession(body.sessionId, body.projectPath);
+    if (!this.chooseExtractor(session)) {
+      this.setStatus(
+        session.sessionId,
+        'error',
+        'Missing API key. Set ANTHROPIC_API_KEY in project .env or plugin environment.',
+      );
+    }
     const response = this.buildProgressResponse(session);
     res.writeHead(200);
     res.end(JSON.stringify(response));
@@ -314,16 +338,6 @@ export class ProgressServer {
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ): Promise<void> {
-    if (!this.config.apiKey) {
-      res.writeHead(503);
-      res.end(JSON.stringify({ error: 'Missing API key' }));
-      return;
-    }
-    if (!this.extractor) {
-      res.writeHead(503);
-      res.end(JSON.stringify({ error: 'Extractor not initialized' }));
-      return;
-    }
     const body = parseJsonLine(await readBody(req));
     const requestedSessionId = isRefreshRequest(body)
       ? body.sessionId
@@ -340,11 +354,17 @@ export class ProgressServer {
       res.end(JSON.stringify({ error: 'Session not found' }));
       return;
     }
+    const extractor = this.chooseExtractor(session);
+    if (!extractor) {
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: 'Missing API key. Set ANTHROPIC_API_KEY in project .env or plugin environment.' }));
+      return;
+    }
     this.setStatus(sessionId, 'syncing');
     try {
       const logPath = session.watcher.getFilePath();
       const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : session.buffer.getTurns();
-      const updated = await this.extractor.extract(session.store.getState(), turns);
+      const updated = await extractor.extract(session.store.getState(), turns);
       session.store.setState(updated);
       this.setStatus(sessionId, 'idle');
       try {
@@ -405,6 +425,8 @@ export class ProgressServer {
     }
     const logPath = session.watcher.getFilePath();
     const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : [];
+    const extractor = session.extractor;
+    const config = extractor ? undefined : this.config;
     res.writeHead(200);
     res.end(
       JSON.stringify({
@@ -413,8 +435,9 @@ export class ProgressServer {
         sessionId: session.sessionId,
         logPath,
         logExists: logPath ? fs.existsSync(logPath) : false,
-        apiKeyConfigured: !!this.config.apiKey,
+        apiKeyConfigured: !!(extractor || this.config.apiKey),
         model: this.config.model,
+        projectModel: config?.model,
         bufferSize: session.buffer.getTurns().length,
         logTurnCount: turns.length,
         status: session.status,
