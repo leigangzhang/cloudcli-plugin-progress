@@ -23,6 +23,21 @@ function ensureAssets(): void {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
+    .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
+    .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
+    .pp-markdown h1 { font-size: 1.1em; }
+    .pp-markdown h2 { font-size: 1em; }
+    .pp-markdown h3 { font-size: 0.95em; }
+    .pp-markdown pre { background: var(--pp-dim); padding: 8px; border-radius: 4px; overflow: auto; margin: 0.5em 0; }
+    .pp-markdown pre code { background: transparent; padding: 0; }
+    .pp-markdown code { font-family: inherit; background: var(--pp-dim); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+    .pp-markdown a { color: var(--pp-accent); text-decoration: none; }
+    .pp-markdown a:hover { text-decoration: underline; }
+    .pp-markdown ul, .pp-markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
+    .pp-markdown li { margin: 0.2em 0; }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 8px; margin: 0.5em 0; color: var(--pp-muted); }
+    .pp-markdown table { border-collapse: collapse; margin: 0.5em 0; }
+    .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 4px 8px; }
   `;
   document.head.appendChild(style);
 }
@@ -52,6 +67,9 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     const colors = themeColors(dark);
     root.style.background = colors.bg;
     root.style.color = colors.text;
+    for (const [key, value] of Object.entries(colors)) {
+      root.style.setProperty(`--pp-${key}`, value);
+    }
 
     if (!api.context.project || !api.context.session) {
       root.innerHTML = renderEmpty(colors, 'Select a project and session to view progress.');

@@ -48,7 +48,7 @@ describe('buildTurns', () => {
     expect(turns[1].assistantText).toBe('Answer two');
   });
 
-  it('follows parentUuid chains through tool results', () => {
+  it('puts tool results into toolText, not userText', () => {
     const entries: LogEntry[] = [
       {
         type: 'user',
@@ -89,8 +89,9 @@ describe('buildTurns', () => {
     const turns = buildTurns(entries.map((entry, index) => ({ entry, lineNumber: index + 1 })));
     expect(turns.length).toBe(1);
     expect(turns[0].promptId).toBe('p1');
-    expect(turns[0].userText).toContain('Run command');
-    expect(turns[0].userText).toContain('output');
+    expect(turns[0].userText).toBe('Run command');
+    expect(turns[0].userText).not.toContain('output');
+    expect(turns[0].toolText).toContain('output');
     expect(turns[0].assistantText).toBe('Final answer');
   });
 

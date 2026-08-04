@@ -1,3 +1,4 @@
+import { marked } from 'marked';
 import type { ProgressGoal, ProgressStep, ProgressTree, TurnResponse } from '../core/types.js';
 import type { ThemeColors } from './theme.js';
 import { statusBadge } from './badge.js';
@@ -8,7 +9,6 @@ export interface TreeRenderOptions {
   expanded: Set<string>;
   turnExpanded: Set<string>;
   turnRecords: Map<string, TurnResponse>;
-  onToggle?: (id: string) => void;
 }
 
 export function renderProgressTree(
@@ -73,17 +73,18 @@ function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors:
     return `<div style="margin-left:18px;padding:8px;color:${colors.muted};font-size:0.7rem;">Loading conversation...</div>`;
   }
   const userBlock = renderBlock('User question', turn.userText, colors);
-  const thinkingBlock = turn.thinkingText
+  const assistantBlock = renderBlock('Assistant reply', turn.assistantText, colors);
+  const reasoningContent = [turn.thinkingText, turn.toolText].filter(Boolean).join('\n\n---\n\n');
+  const reasoningBlock = reasoningContent
     ? `<details style="margin:6px 0;color:${colors.text};">
-        <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">Model reasoning</summary>
-        <div style="margin-top:6px;">${renderPre(turn.thinkingText, colors)}</div>
+        <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">Model reasoning & tool results</summary>
+        <div style="margin-top:6px;">${renderMarkdown(reasoningContent, colors)}</div>
       </details>`
     : '';
-  const assistantBlock = renderBlock('Assistant reply', turn.assistantText, colors);
   return `
     <div class="pp-turn-panel" style="margin-left:18px;margin-bottom:8px;padding:10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};">
       ${userBlock}
-      ${thinkingBlock}
+      ${reasoningBlock}
       ${assistantBlock}
     </div>
   `;
@@ -94,13 +95,14 @@ function renderBlock(label: string, text: string | undefined, colors: ThemeColor
   return `
     <div style="margin:6px 0;">
       <div style="color:${colors.muted};font-size:0.7rem;margin-bottom:4px;">${escapeHtml(label)}</div>
-      ${renderPre(text, colors)}
+      ${renderMarkdown(text, colors)}
     </div>
   `;
 }
 
-function renderPre(text: string, colors: ThemeColors): string {
-  return `<pre style="margin:0;padding:8px;border-radius:4px;background:${colors.dim};color:${colors.text};font-size:0.72rem;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto;">${escapeHtml(text)}</pre>`;
+function renderMarkdown(text: string, _colors: ThemeColors): string {
+  const html = marked.parse(text, { async: false }) as string;
+  return `<div class="pp-markdown" style="font-size:0.75rem;line-height:1.5;">${html}</div>`;
 }
 
 function escapeHtml(value: string): string {

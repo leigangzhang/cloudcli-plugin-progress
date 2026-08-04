@@ -27,6 +27,55 @@ describe('loadConfig', () => {
     tmp.cleanup();
   });
 
+  it('reads API key, base URL and model from project .env', () => {
+    const tmp = createTempDir();
+    const projectPath = tmp.path;
+    fs.writeFileSync(
+      path.join(projectPath, '.env'),
+      'ANTHROPIC_API_KEY=project-token\nANTHROPIC_BASE_URL=https://project.example\nPROGRESS_MODEL=project-model',
+      'utf-8',
+    );
+
+    const config = loadConfig({ projectPath });
+    expect(config.apiKey).toBe('project-token');
+    expect(config.baseUrl).toBe('https://project.example');
+    expect(config.model).toBe('project-model');
+    tmp.cleanup();
+  });
+
+  it('project .env overrides settings.json and environment variables', () => {
+    const tmp = createTempDir();
+    const projectPath = tmp.path;
+    const settingsPath = path.join(tmp.path, 'settings.json');
+    fs.writeFileSync(
+      path.join(projectPath, '.env'),
+      'ANTHROPIC_API_KEY=project-token\nPROGRESS_MODEL=project-model',
+      'utf-8',
+    );
+    fs.writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          ANTHROPIC_API_KEY: 'settings-token',
+          PROGRESS_MODEL: 'settings-model',
+        },
+      }),
+      'utf-8',
+    );
+
+    const config = loadConfig({
+      projectPath,
+      settingsPath,
+      env: {
+        ANTHROPIC_API_KEY: 'env-token',
+        PROGRESS_MODEL: 'env-model',
+      },
+    });
+    expect(config.apiKey).toBe('project-token');
+    expect(config.model).toBe('project-model');
+    tmp.cleanup();
+  });
+
   it('falls back to legacy ANTHROPIC_AUTH_TOKEN / ANTHROPIC_MODEL names', () => {
     const tmp = createTempDir();
     const settingsPath = path.join(tmp.path, 'settings.json');
@@ -99,7 +148,7 @@ describe('loadConfig', () => {
     expect(config.model).toBe('header-model');
   });
 
-  it('prefers settings.json over env and headers', () => {
+  it('prefers settings.json over env and headers when no project .env', () => {
     const tmp = createTempDir();
     const settingsPath = path.join(tmp.path, 'settings.json');
     fs.writeFileSync(

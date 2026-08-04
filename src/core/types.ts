@@ -65,6 +65,7 @@ export interface ConversationTurn {
   userText?: string;
   thinkingText?: string;
   assistantText?: string;
+  toolText?: string;
   timestamp: string;
 }
 
