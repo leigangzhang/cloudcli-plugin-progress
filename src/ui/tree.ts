@@ -82,7 +82,7 @@ function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors:
       </details>`
     : '';
   return `
-    <div class="pp-turn-panel" style="margin-left:18px;margin-bottom:8px;padding:10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};">
+    <div class="pp-turn-panel" style="margin-left:18px;margin-bottom:8px;padding:10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${assistantBlock}
