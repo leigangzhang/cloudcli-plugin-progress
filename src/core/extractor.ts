@@ -65,6 +65,13 @@ function truncateText(text: string | undefined, maxLength: number): string | und
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + '\n...[truncated]';
 }
+function chunkTurns(turns: ConversationTurn[], size: number): ConversationTurn[][] {
+  const chunks: ConversationTurn[][] = [];
+  for (let i = 0; i < turns.length; i += size) {
+    chunks.push(turns.slice(i, i + size));
+  }
+  return chunks;
+}
 
 export class LLMExtractionEngineImpl implements LLMExtractionEngine {
   private client: Anthropic;
@@ -84,6 +91,9 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
   }
 
   async extract(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree> {
+    if (this.config.usePolling && turns.length > 5) {
+      return this.extractByPolling(tree, turns);
+    }
     try {
       return await this.doExtract(tree, summarizeTurns(turns, 20), false);
     } catch (err) {
@@ -95,6 +105,15 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       // Retry once with a stricter prompt before giving up.
       return await this.doExtract(tree, summarizeTurns(turns, 20), true);
     }
+  }
+  private async extractByPolling(tree: ProgressTree, turns: ConversationTurn[]): Promise<ProgressTree> {
+    const chunkSize = 5;
+    const chunks = chunkTurns(turns, chunkSize);
+    let currentTree = tree;
+    for (const chunk of chunks) {
+      currentTree = await this.doExtract(currentTree, summarizeTurns(chunk, chunkSize), false);
+    }
+    return currentTree;
   }
 
   onUsage(callback: (usage: { inputTokens: number; outputTokens: number }) => void): () => void {
