@@ -305,14 +305,53 @@ describe('LLMExtractionEngineImpl', () => {
     expect(prompt).toContain('p1');
     expect(prompt).toContain('hello');
   });
-  it('summarizeTurns truncates long text fields', () => {
+
+  it('omits reasoning and tool output from the LLM prompt', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const client = mockClient({
+      text: JSON.stringify({ version: 2, goals: [] }),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const turns: ConversationTurn[] = [
+      {
+        promptId: 'p1',
+        lineStart: 1,
+        lineEnd: 2,
+        userText: 'user question',
+        thinkingText: 'private reasoning',
+        assistantText: 'model reply',
+        toolText: 'private tool output',
+        timestamp: '2026-01-01T00:00:00Z',
+      },
+    ];
+    await engine.extract(tree, turns);
+    const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0].messages[0].content;
+    expect(prompt).toContain('user question');
+    expect(prompt).toContain('model reply');
+    expect(prompt).not.toContain('private reasoning');
+    expect(prompt).not.toContain('private tool output');
+  });
+
+  it('summarizeTurns truncates only user and assistant text', () => {
     const longText = 'a'.repeat(5000);
     const turns: ConversationTurn[] = [
-      { promptId: 'p1', lineStart: 1, lineEnd: 2, userText: longText, timestamp: '2026-01-01T00:00:00Z' },
+      {
+        promptId: 'p1',
+        lineStart: 1,
+        lineEnd: 2,
+        userText: longText,
+        thinkingText: 'internal',
+        assistantText: longText,
+        toolText: 'tool',
+        timestamp: '2026-01-01T00:00:00Z',
+      },
     ];
     const summarized = summarizeTurns(turns, 20, 2000);
     expect(summarized[0].userText).toHaveLength(2000 + '\n...[truncated]'.length);
     expect(summarized[0].userText).toContain('\n...[truncated]');
+    expect(summarized[0].assistantText).toContain('\n...[truncated]');
+    expect(summarized[0]).not.toHaveProperty('thinkingText');
+    expect(summarized[0]).not.toHaveProperty('toolText');
   });
   it('retries with only the last 5 turns when JSON parsing fails', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };

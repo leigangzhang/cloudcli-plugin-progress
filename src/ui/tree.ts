@@ -73,18 +73,16 @@ function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors:
     return `<div style="margin-left:18px;padding:8px;color:${colors.muted};font-size:0.7rem;">Loading conversation...</div>`;
   }
   const userBlock = renderBlock('User question', turn.userText, colors);
-  const assistantBlock = renderBlock('Assistant reply', turn.assistantText, colors);
-  const reasoningContent = [turn.thinkingText, turn.toolText].filter(Boolean).join('\n\n---\n\n');
-  const reasoningBlock = reasoningContent
-    ? `<details style="margin:6px 0;color:${colors.text};">
-        <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">Model reasoning & tool results</summary>
-        <div style="margin-top:6px;">${renderMarkdown(reasoningContent, colors)}</div>
-      </details>`
-    : '';
+  const assistantBlock = turn.assistantText
+    ? renderBlock('Assistant reply', turn.assistantText, colors)
+    : renderEmptyBlock('Assistant reply', colors);
+  const reasoningBlock = renderPlainDetails('Model reasoning', turn.thinkingText, colors);
+  const toolBlock = renderPlainDetails('Tool activity', turn.toolText, colors);
   return `
     <div class="pp-turn-panel" style="margin-left:18px;margin-bottom:8px;padding:10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
+      ${toolBlock}
       ${assistantBlock}
     </div>
   `;
@@ -96,6 +94,30 @@ function renderBlock(label: string, text: string | undefined, colors: ThemeColor
     <div style="margin:6px 0;">
       <div style="color:${colors.muted};font-size:0.7rem;margin-bottom:4px;">${escapeHtml(label)}</div>
       ${renderMarkdown(text, colors)}
+    </div>
+  `;
+}
+
+function renderPlainDetails(
+  label: string,
+  text: string | undefined,
+  colors: ThemeColors,
+): string {
+  if (!text) return '';
+  const sizeLabel = text.length >= 10_000 ? `${Math.round(text.length / 1000)}k` : `${text.length}`;
+  return `
+    <details style="margin:6px 0;color:${colors.text};">
+      <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">${escapeHtml(label)} (${sizeLabel} characters)</summary>
+      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.dim};border-radius:4px;font-size:0.72rem;line-height:1.45;">${escapeHtml(text)}</pre>
+    </details>
+  `;
+}
+
+function renderEmptyBlock(label: string, colors: ThemeColors): string {
+  return `
+    <div style="margin:6px 0;">
+      <div style="color:${colors.muted};font-size:0.7rem;margin-bottom:4px;">${escapeHtml(label)}</div>
+      <div style="color:${colors.muted};font-size:0.72rem;">No reply recorded.</div>
     </div>
   `;
 }

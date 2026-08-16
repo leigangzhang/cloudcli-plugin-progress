@@ -130,6 +130,28 @@ describe('buildCodexTurns', () => {
     expect(turns[0].assistantText).toBe('Only response item should win');
   });
 
+  it('does not duplicate user text from response_item and event_msg', () => {
+    const question = 'The same user question should only appear once.';
+    const turns = buildCodexTurns([
+      entry(1, { type: 'turn_context', payload: { turn_id: 'turn-user-dup' } }),
+      entry(2, {
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: question }],
+        },
+      }),
+      entry(3, {
+        type: 'event_msg',
+        payload: { type: 'user_message', message: question },
+      }),
+    ]);
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0].userText).toBe(question);
+  });
+
   it('ignores world_state and developer context', () => {
     const turns = buildCodexTurns([
       entry(1, { type: 'world_state', payload: { some: 'metadata' } }),
@@ -151,6 +173,61 @@ describe('buildCodexTurns', () => {
     expect(turns).toHaveLength(1);
     expect(turns[0].userText).toBe('Visible request');
     expect(turns[0].assistantText).toBeUndefined();
+  });
+
+  it('filters environment and turn_aborted system user messages', () => {
+    const turns = buildCodexTurns([
+      entry(1, { type: 'turn_context', payload: { turn_id: 'turn-system' } }),
+      entry(2, {
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: '<environment_context>hidden</environment_context>' }],
+        },
+      }),
+      entry(3, {
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: '<turn_aborted>hidden</turn_aborted>' }],
+        },
+      }),
+      entry(4, {
+        type: 'event_msg',
+        payload: { type: 'user_message', message: 'Real user request' },
+      }),
+    ]);
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0].userText).toBe('Real user request');
+  });
+
+  it('truncates very long reasoning and tool output', () => {
+    const turns = buildCodexTurns([
+      entry(1, { type: 'turn_context', payload: { turn_id: 'turn-long' } }),
+      entry(2, {
+        type: 'response_item',
+        payload: {
+          type: 'reasoning',
+          summary: [{ type: 'summary_text', text: 'r'.repeat(30_000) }],
+        },
+      }),
+      entry(3, {
+        type: 'response_item',
+        payload: {
+          type: 'function_call_output',
+          output: 't'.repeat(50_000),
+        },
+      }),
+    ]);
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0].thinkingText).toContain('[truncated');
+    expect(turns[0].thinkingText!.length).toBeLessThan(13_000);
+    expect(turns[0].toolText).toContain('[truncated');
+    expect(turns[0].toolText!.length).toBeLessThan(12_000);
   });
 
   it('ignores unknown outer events', () => {
