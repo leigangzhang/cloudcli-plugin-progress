@@ -2,7 +2,7 @@
  import fs from 'node:fs';
  import path from 'node:path';
 import { FileLogWatcher } from '../../src/core/watcher.js';
-import type { LogEntry } from '../../src/core/types.js';
+import type { LogEntry, SessionLogEntry } from '../../src/core/types.js';
 import { appendJsonl, createTempDir, wait, writeJsonl } from '../utils.js';
 import { resolveLogPath } from '../../src/core/paths.js';
 
@@ -86,6 +86,63 @@ function logPath(tmp: string, sessionId: string): string {
      await wait(400);
      expect(lines.length).toBe(1);
      expect(lines[0].type).toBe('mode');
+     watcher.stop();
+     tmp.cleanup();
+   });
+
+   it('buffers a partial JSONL line across appends', async () => {
+     const tmp = createTempDir();
+     const file = path.join(tmp.path, 'partial.jsonl');
+     fs.writeFileSync(file, '', 'utf-8');
+
+     const watcher = new FileLogWatcher({
+       watchImpl: 'watchFile',
+       pollInterval: 100,
+       projectsDir: path.join(tmp.path, 'projects'),
+     });
+     const lines: SessionLogEntry[] = [];
+     watcher.onLine((e) => lines.push(e));
+     await watcher.startWithPath(file);
+
+     const payload = JSON.stringify({
+       type: 'response_item',
+       payload: { type: 'function_call_output', output: 'x'.repeat(20000) },
+     });
+     fs.appendFileSync(file, payload.slice(0, payload.length / 2), 'utf-8');
+     await wait(300);
+     expect(lines.length).toBe(0);
+
+     fs.appendFileSync(file, payload.slice(payload.length / 2) + '\n', 'utf-8');
+     await wait(500);
+     expect(lines.length).toBe(1);
+     expect(lines[0].type).toBe('response_item');
+     expect(lines[0].payload).toBeTypeOf('object');
+     watcher.stop();
+     tmp.cleanup();
+   });
+
+   it('starts from an absolute Codex rollout path', async () => {
+     const tmp = createTempDir();
+     const file = path.join(tmp.path, 'rollout.jsonl');
+     writeJsonl(file, [
+       {
+         type: 'turn_context',
+         payload: { turn_id: 'turn-1' },
+       },
+     ]);
+
+     const watcher = new FileLogWatcher({
+       watchImpl: 'watchFile',
+       pollInterval: 100,
+       projectsDir: path.join(tmp.path, 'unused-projects'),
+     });
+     const lines: SessionLogEntry[] = [];
+     watcher.onLine((e) => lines.push(e));
+     await watcher.startWithPath(file);
+     await wait(300);
+     expect(watcher.getFilePath()).toBe(file);
+     expect(lines.length).toBe(1);
+     expect(lines[0].type).toBe('turn_context');
      watcher.stop();
      tmp.cleanup();
    });

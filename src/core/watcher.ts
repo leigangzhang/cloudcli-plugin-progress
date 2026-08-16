@@ -1,8 +1,7 @@
  import fs from 'node:fs';
- import readline from 'node:readline';
  import { resolveSessionLogPath } from './paths.js';
  import { isLogEntry, parseJsonLine } from './protocol.js';
- import type { LogEntry, SessionLogWatcher } from './types.js';
+ import type { SessionLogEntry, SessionLogWatcher } from './types.js';
 
  export interface FileLogWatcherOptions {
    watchImpl?: 'auto' | 'watch' | 'watchFile';
@@ -18,7 +17,8 @@
    private watcher: fs.FSWatcher | null = null;
    private pollTimer: ReturnType<typeof setInterval> | null = null;
    private readTimer: ReturnType<typeof setTimeout> | null = null;
-   private listeners: ((entry: LogEntry) => void)[] = [];
+   private listeners: ((entry: SessionLogEntry) => void)[] = [];
+   private pendingPartialLine = '';
    private stopped = false;
    private options: Required<Pick<FileLogWatcherOptions, 'watchImpl' | 'pollInterval' | 'debounceMs'>> &
      Pick<FileLogWatcherOptions, 'projectsDir'>;
@@ -33,7 +33,17 @@
    }
 
    async start(projectPath: string, sessionId: string): Promise<void> {
-     this.filePath = (await resolveSessionLogPath(projectPath, sessionId, this.options.projectsDir)).logPath;
+     const filePath = (
+       await resolveSessionLogPath(projectPath, sessionId, this.options.projectsDir)
+     ).logPath;
+     await this.startWithPath(filePath);
+   }
+
+   async startWithPath(filePath: string): Promise<void> {
+     this.filePath = filePath;
+     this.position = 0;
+     this.lineCount = 0;
+     this.pendingPartialLine = '';
      await this.readNewLines();
      this.watch();
    }
@@ -54,7 +64,7 @@
      }
    }
 
-   onLine(callback: (entry: LogEntry) => void): () => void {
+   onLine(callback: (entry: SessionLogEntry) => void): () => void {
      this.listeners.push(callback);
      return () => {
        const idx = this.listeners.indexOf(callback);
@@ -113,18 +123,29 @@
      if (size < this.position) {
        this.position = 0;
        this.lineCount = 0;
+       this.pendingPartialLine = '';
      }
      if (size === this.position) {
        return;
      }
 
+     let buffer = this.pendingPartialLine;
      const stream = fs.createReadStream(this.filePath, {
        start: this.position,
        end: size - 1,
        encoding: 'utf-8',
      });
-     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-     for await (const line of rl) {
+     for await (const chunk of stream) {
+       buffer += chunk;
+       const lines = buffer.split(/\r?\n/);
+       this.pendingPartialLine = lines.pop() ?? '';
+       this.emitLines(lines);
+     }
+     this.position = size;
+   }
+
+   private emitLines(lines: string[]): void {
+     for (const line of lines) {
        if (!line) continue;
        this.lineCount++;
        const parsed = parseJsonLine(line);
@@ -132,6 +153,5 @@
          this.listeners.forEach((cb) => cb(parsed));
        }
      }
-     this.position = size;
    }
  }

@@ -4,8 +4,8 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 
 ## Features
 
-- **Multi-session isolation** — Each Claude Code session gets its own watcher, buffer, detector, and state. Switching sessions never mixes progress.
-- **Claude Code session mapping** — The `sessionId` passed by CloudCLI is mapped to the real Claude Code CLI session id. Logs are read from `~/.claude/projects/<project-encoding>/<sessionId>.jsonl`.
+- **Multi-session isolation** — Each provider session gets its own watcher, buffer, detector, and state. Switching sessions never mixes progress.
+- **Claude Code and Codex session support** — CloudCLI session mappings are detected automatically. Claude Code logs are read from `~/.claude/projects/<project-encoding>/<sessionId>.jsonl`, while Codex logs are read from the mapped `~/.codex/sessions/.../rollout-*.jsonl`.
 - **Goal → Turn tree** —
   - **Goal**: a high-level topic or objective from the conversation.
   - **Step**: one conversation turn. Click a step to expand the original user question, model reasoning, and assistant reply.
@@ -15,6 +15,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 - **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/progress-plugin/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
 - **Large-session polling** — Enable with `PROGRESS_USE_POLLING=true`. Long sessions are processed in 5-turn chunks; each intermediate result is pushed to the UI immediately via WebSocket.
 - **Large-session fallback** — If the model returns empty or malformed JSON, the plugin truncates each turn and retries with only the last 5 turns.
+- **Codex rollout parsing** — Codex turns are grouped by `turn_id`, including user messages, summarized reasoning, assistant output, and tool calls. V1 tracks the mapped root thread; spawned subagent rollouts are not merged automatically.
 - **WebSocket live updates** — Progress and status changes are pushed to the UI without polling.
 - **Dark / light theme** — Adapts to the CloudCLI theme automatically.
 
@@ -166,6 +167,12 @@ Recommended for sessions larger than a few dozen turns or when the default mode 
   - Increase `MAX_TOKENS` to give the model more room for the JSON response.
 - **WebSocket not updating**:
   - Ensure the plugin server logged `{ "ready": true, "port": ... }` and the `subscribe` message contains the correct `sessionId`.
+
+### Codex sessions
+
+CloudCLI stores provider metadata in `~/.cloudcli/auth.db`. When the current session has `provider = "codex"`, the plugin follows its `jsonl_path` to the local Codex rollout under `~/.codex/sessions`. `/debug` reports the detected provider and log path.
+
+If Codex history persistence is disabled or the rollout was archived without updating the CloudCLI mapping, the plugin falls back to the Codex state database and archived session directory.
 
 ## License
 

@@ -1,7 +1,9 @@
+import type { LogProvider } from './types.js';
 export declare function encodeProjectPath(projectPath: string): string;
 export interface ResolvedLogPath {
     logPath: string;
     realSessionId: string;
+    provider: LogProvider;
 }
 export declare function resolveLogPath(projectPath: string, sessionId: string, projectsDir?: string): string;
 export declare function resolveSessionLogPath(projectPath: string, cloudcliSessionId: string, projectsDir?: string): Promise<ResolvedLogPath>;

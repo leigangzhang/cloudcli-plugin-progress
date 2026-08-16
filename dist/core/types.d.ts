@@ -17,6 +17,10 @@ export interface LogEntry {
     };
     [key: string]: unknown;
 }
+export type LogProvider = 'claude' | 'codex';
+export type SessionLogEntry = LogEntry | (Record<string, unknown> & {
+    type?: string;
+});
 export type ContentBlock = {
     type: 'thinking';
     thinking: string;
@@ -141,8 +145,9 @@ export interface LLMConfig {
 }
 export interface SessionLogWatcher {
     start(projectPath: string, sessionId: string): Promise<void>;
+    startWithPath(filePath: string): Promise<void>;
     stop(): void;
-    onLine(callback: (entry: LogEntry) => void): () => void;
+    onLine(callback: (entry: SessionLogEntry) => void): () => void;
     getCursor(): {
         bytesRead: number;
         lastLine: number;
@@ -150,7 +155,7 @@ export interface SessionLogWatcher {
     getFilePath(): string;
 }
 export interface DiffDetector {
-    ingest(entry: LogEntry): void;
+    ingest(entry: SessionLogEntry): void;
     onTrigger(callback: (segments: ConversationSegment[]) => void): () => void;
     flush(): void;
 }
