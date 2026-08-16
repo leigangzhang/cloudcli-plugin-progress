@@ -1,5 +1,19 @@
 import fs from 'node:fs';
 import { parseJsonLine } from '../protocol.js';
+const MAX_USER_CHARS = 20000;
+const MAX_ASSISTANT_CHARS = 20000;
+const MAX_THINKING_CHARS = 12000;
+const MAX_TOOL_CHARS = 30000;
+const MAX_TOOL_ITEM_CHARS = 10000;
+const SYSTEM_USER_TAGS = new Set([
+    'app-context',
+    'collaboration_mode',
+    'environment_context',
+    'permissions instructions',
+    'plugins_instructions',
+    'skills_instructions',
+    'turn_aborted',
+]);
 function asRecord(value) {
     return typeof value === 'object' && value !== null
         ? value
@@ -72,6 +86,36 @@ function summarizeFunctionArguments(value) {
 function latestTimestamp(values) {
     return values.reduce((latest, value) => (value > latest ? value : latest), '');
 }
+function normalizeText(value) {
+    return value.replace(/\r\n/g, '\n').trim();
+}
+function uniqueTexts(values) {
+    const seen = new Set();
+    return values.filter((value) => {
+        const normalized = normalizeText(value);
+        if (!normalized || seen.has(normalized))
+            return false;
+        seen.add(normalized);
+        return true;
+    });
+}
+function isSystemUserText(value) {
+    const normalized = normalizeText(value);
+    if (!normalized.startsWith('<'))
+        return false;
+    const tag = normalized.match(/^<([a-zA-Z_ -]+)/)?.[1];
+    return !!tag && SYSTEM_USER_TAGS.has(tag);
+}
+function truncateField(value, maxLength) {
+    if (value.length <= maxLength)
+        return value;
+    const omitted = value.length - maxLength;
+    return `${value.slice(0, maxLength)}\n\n...[truncated ${omitted} characters]`;
+}
+function joinField(values, maxLength, separator = '\n\n') {
+    const text = uniqueTexts(values).join(separator).trim();
+    return text ? truncateField(text, maxLength) : undefined;
+}
 function groupEntries(entries) {
     const groups = new Map();
     let currentTurnId;
@@ -96,7 +140,8 @@ function groupEntries(entries) {
     return Array.from(groups.values());
 }
 function buildTurn(group) {
-    const userTexts = [];
+    const eventUserTexts = [];
+    const responseUserTexts = [];
     const eventAssistantTexts = [];
     const assistantTexts = [];
     const thinkingTexts = [];
@@ -114,7 +159,7 @@ function buildTurn(group) {
             if (payload.type === 'user_message') {
                 const message = stringValue(payload.message);
                 if (message)
-                    userTexts.push(message);
+                    eventUserTexts.push(message);
             }
             else if (payload.type === 'agent_message') {
                 const message = stringValue(payload.message);
@@ -129,13 +174,9 @@ function buildTurn(group) {
             if (payload.role === 'assistant') {
                 assistantTexts.push(...contentText(payload.content));
             }
-            else if (payload.role === 'user' &&
-                userTexts.length === 0 &&
-                payload.content) {
+            else if (payload.role === 'user' && payload.content) {
                 const parts = contentText(payload.content);
-                const userText = parts.find((part) => !part.startsWith('<environment_context>'));
-                if (userText)
-                    userTexts.push(userText);
+                responseUserTexts.push(...parts.filter((part) => !isSystemUserText(part)));
             }
         }
         else if (payload.type === 'reasoning') {
@@ -146,33 +187,32 @@ function buildTurn(group) {
         else if (payload.type === 'function_call') {
             const name = stringValue(payload.name) ?? 'unknown_tool';
             const args = summarizeFunctionArguments(payload.arguments);
-            toolTexts.push(`[tool:${name}]\n${args}`.trim());
+            toolTexts.push(truncateField(`[tool:${name}]\n${args}`.trim(), MAX_TOOL_ITEM_CHARS));
         }
         else if (payload.type === 'function_call_output') {
             const output = payload.output;
             const text = typeof output === 'string'
                 ? output
                 : summarizeFunctionArguments(output);
-            toolTexts.push(`[tool_result]\n${text}`.trim());
+            toolTexts.push(truncateField(`[tool_result]\n${text}`.trim(), MAX_TOOL_ITEM_CHARS));
         }
         else if (payload.type === 'custom_tool_call') {
             const name = stringValue(payload.name) ?? 'unknown_custom_tool';
-            toolTexts.push(`[custom_tool:${name}]\n${summarizeFunctionArguments(payload.input)}`.trim());
+            toolTexts.push(truncateField(`[custom_tool:${name}]\n${summarizeFunctionArguments(payload.input)}`.trim(), MAX_TOOL_ITEM_CHARS));
         }
         else if (payload.type === 'custom_tool_call_output') {
-            toolTexts.push(`[custom_tool_result]\n${summarizeFunctionArguments(payload.output)}`.trim());
+            toolTexts.push(truncateField(`[custom_tool_result]\n${summarizeFunctionArguments(payload.output)}`.trim(), MAX_TOOL_ITEM_CHARS));
         }
     }
+    const userText = joinField(eventUserTexts.length > 0 ? eventUserTexts : responseUserTexts, MAX_USER_CHARS);
     return {
         promptId: group.turnId,
         lineStart: group.entries[0].lineNumber,
         lineEnd: group.entries[group.entries.length - 1].lineNumber,
-        userText: userTexts.join('\n').trim() || undefined,
-        thinkingText: thinkingTexts.join('\n').trim() || undefined,
-        assistantText: assistantTexts.join('\n').trim() ||
-            eventAssistantTexts.join('\n').trim() ||
-            undefined,
-        toolText: toolTexts.join('\n').trim() || undefined,
+        userText,
+        thinkingText: joinField(thinkingTexts, MAX_THINKING_CHARS, '\n\n---\n\n'),
+        assistantText: joinField(assistantTexts.length > 0 ? assistantTexts : eventAssistantTexts, MAX_ASSISTANT_CHARS),
+        toolText: joinField(toolTexts, MAX_TOOL_CHARS, '\n\n---\n\n'),
         timestamp: latestTimestamp(timestamps),
         entryCount: group.entries.length,
     };

@@ -3,6 +3,21 @@ import { parseJsonLine } from '../protocol.js';
 import type { ConversationTurn, SessionLogEntry } from '../types.js';
 import type { CodexEntryWithLine, CodexTurnBuilderOutput } from './types.js';
 
+const MAX_USER_CHARS = 20_000;
+const MAX_ASSISTANT_CHARS = 20_000;
+const MAX_THINKING_CHARS = 12_000;
+const MAX_TOOL_CHARS = 30_000;
+const MAX_TOOL_ITEM_CHARS = 10_000;
+const SYSTEM_USER_TAGS = new Set([
+  'app-context',
+  'collaboration_mode',
+  'environment_context',
+  'permissions instructions',
+  'plugins_instructions',
+  'skills_instructions',
+  'turn_aborted',
+]);
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null
     ? (value as Record<string, unknown>)
@@ -78,6 +93,42 @@ function latestTimestamp(values: string[]): string {
   return values.reduce((latest, value) => (value > latest ? value : latest), '');
 }
 
+function normalizeText(value: string): string {
+  return value.replace(/\r\n/g, '\n').trim();
+}
+
+function uniqueTexts(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const normalized = normalizeText(value);
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function isSystemUserText(value: string): boolean {
+  const normalized = normalizeText(value);
+  if (!normalized.startsWith('<')) return false;
+  const tag = normalized.match(/^<([a-zA-Z_ -]+)/)?.[1];
+  return !!tag && SYSTEM_USER_TAGS.has(tag);
+}
+
+function truncateField(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  const omitted = value.length - maxLength;
+  return `${value.slice(0, maxLength)}\n\n...[truncated ${omitted} characters]`;
+}
+
+function joinField(
+  values: string[],
+  maxLength: number,
+  separator = '\n\n',
+): string | undefined {
+  const text = uniqueTexts(values).join(separator).trim();
+  return text ? truncateField(text, maxLength) : undefined;
+}
+
 interface TurnGroup {
   turnId: string;
   entries: CodexEntryWithLine[];
@@ -109,7 +160,8 @@ function groupEntries(entries: CodexEntryWithLine[]): TurnGroup[] {
 }
 
 function buildTurn(group: TurnGroup): CodexTurnBuilderOutput {
-  const userTexts: string[] = [];
+  const eventUserTexts: string[] = [];
+  const responseUserTexts: string[] = [];
   const eventAssistantTexts: string[] = [];
   const assistantTexts: string[] = [];
   const thinkingTexts: string[] = [];
@@ -126,7 +178,7 @@ function buildTurn(group: TurnGroup): CodexTurnBuilderOutput {
     if (type === 'event_msg') {
       if (payload.type === 'user_message') {
         const message = stringValue(payload.message);
-        if (message) userTexts.push(message);
+        if (message) eventUserTexts.push(message);
       } else if (payload.type === 'agent_message') {
         const message = stringValue(payload.message);
         if (message) eventAssistantTexts.push(message);
@@ -138,14 +190,9 @@ function buildTurn(group: TurnGroup): CodexTurnBuilderOutput {
     if (payload.type === 'message') {
       if (payload.role === 'assistant') {
         assistantTexts.push(...contentText(payload.content));
-      } else if (
-        payload.role === 'user' &&
-        userTexts.length === 0 &&
-        payload.content
-      ) {
+      } else if (payload.role === 'user' && payload.content) {
         const parts = contentText(payload.content);
-        const userText = parts.find((part) => !part.startsWith('<environment_context>'));
-        if (userText) userTexts.push(userText);
+        responseUserTexts.push(...parts.filter((part) => !isSystemUserText(part)));
       }
     } else if (payload.type === 'reasoning') {
       const summary = reasoningText(payload);
@@ -153,33 +200,48 @@ function buildTurn(group: TurnGroup): CodexTurnBuilderOutput {
     } else if (payload.type === 'function_call') {
       const name = stringValue(payload.name) ?? 'unknown_tool';
       const args = summarizeFunctionArguments(payload.arguments);
-      toolTexts.push(`[tool:${name}]\n${args}`.trim());
+      toolTexts.push(truncateField(`[tool:${name}]\n${args}`.trim(), MAX_TOOL_ITEM_CHARS));
     } else if (payload.type === 'function_call_output') {
       const output = payload.output;
       const text =
         typeof output === 'string'
           ? output
           : summarizeFunctionArguments(output);
-      toolTexts.push(`[tool_result]\n${text}`.trim());
+      toolTexts.push(truncateField(`[tool_result]\n${text}`.trim(), MAX_TOOL_ITEM_CHARS));
     } else if (payload.type === 'custom_tool_call') {
       const name = stringValue(payload.name) ?? 'unknown_custom_tool';
-      toolTexts.push(`[custom_tool:${name}]\n${summarizeFunctionArguments(payload.input)}`.trim());
+      toolTexts.push(
+        truncateField(
+          `[custom_tool:${name}]\n${summarizeFunctionArguments(payload.input)}`.trim(),
+          MAX_TOOL_ITEM_CHARS,
+        ),
+      );
     } else if (payload.type === 'custom_tool_call_output') {
-      toolTexts.push(`[custom_tool_result]\n${summarizeFunctionArguments(payload.output)}`.trim());
+      toolTexts.push(
+        truncateField(
+          `[custom_tool_result]\n${summarizeFunctionArguments(payload.output)}`.trim(),
+          MAX_TOOL_ITEM_CHARS,
+        ),
+      );
     }
   }
+
+  const userText = joinField(
+    eventUserTexts.length > 0 ? eventUserTexts : responseUserTexts,
+    MAX_USER_CHARS,
+  );
 
   return {
     promptId: group.turnId,
     lineStart: group.entries[0].lineNumber,
     lineEnd: group.entries[group.entries.length - 1].lineNumber,
-    userText: userTexts.join('\n').trim() || undefined,
-    thinkingText: thinkingTexts.join('\n').trim() || undefined,
-    assistantText:
-      assistantTexts.join('\n').trim() ||
-      eventAssistantTexts.join('\n').trim() ||
-      undefined,
-    toolText: toolTexts.join('\n').trim() || undefined,
+    userText,
+    thinkingText: joinField(thinkingTexts, MAX_THINKING_CHARS, '\n\n---\n\n'),
+    assistantText: joinField(
+      assistantTexts.length > 0 ? assistantTexts : eventAssistantTexts,
+      MAX_ASSISTANT_CHARS,
+    ),
+    toolText: joinField(toolTexts, MAX_TOOL_CHARS, '\n\n---\n\n'),
     timestamp: latestTimestamp(timestamps),
     entryCount: group.entries.length,
   };

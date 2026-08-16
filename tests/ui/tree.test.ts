@@ -76,4 +76,41 @@ describe('renderProgressTree', () => {
     expect(html).toContain('Assistant reply');
     expect(html).toContain('Done');
   });
+
+  it('splits reasoning and tool activity into plain text details', () => {
+    const options = baseOptions();
+    options.expanded.add('g1');
+    options.turnExpanded.add('s1');
+    options.turnRecords.set('p1', {
+      promptId: 'p1',
+      lineStart: 1,
+      lineEnd: 3,
+      userText: 'Set up bcrypt',
+      thinkingText: 'Think carefully about <strong>injected markup</strong>.',
+      toolText: '{"cmd":"run <test>"}',
+      assistantText: 'Done',
+      timestamp: '2026-01-01T00:00:00Z',
+    });
+    const html = renderProgressTree(tree, options, themeColors(true));
+    expect(html).toContain('Model reasoning');
+    expect(html).toContain('Tool activity');
+    expect(html).toContain('&lt;strong&gt;');
+    expect(html).toContain('&quot;cmd&quot;');
+  });
+
+  it('shows an explicit empty state when a turn has no assistant reply', () => {
+    const options = baseOptions();
+    options.expanded.add('g1');
+    options.turnExpanded.add('s2');
+    options.turnRecords.set('p2', {
+      promptId: 'p2',
+      lineStart: 4,
+      lineEnd: 4,
+      userText: 'Interrupted question',
+      timestamp: '2026-01-01T00:00:00Z',
+    });
+    const html = renderProgressTree(tree, options, themeColors(true));
+    expect(html).toContain('Assistant reply');
+    expect(html).toContain('No reply recorded.');
+  });
 });

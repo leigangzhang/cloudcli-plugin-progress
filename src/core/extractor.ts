@@ -25,10 +25,11 @@ Rules:
 4. Keep existing goal/step IDs stable when they still match the conversation. Only add new goals/steps, update status, or mark nodes completed based on the turns.
 5. Mark a goal or step as completed only when the turn clearly indicates completion.
 6. Use one clear sentence for each subject and one clear sentence for each description. Do not enforce character limits; focus on clarity and usefulness.
-7. Detect the dominant language used by the user across the turns and generate the progress tree in that same language. Prefer the user's language over the assistant's.
-8. Every goal and every step must include a non-empty string "id". Preserve IDs from the current tree where possible; when a node is new, create a stable unique ID from its subject and promptId.
-9. Every step must include the exact promptId of the conversation turn it represents.
-10. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.`;
+7. Infer progress only from the user's question and the model's final reply. Do not attempt to recover or infer internal reasoning, tool calls, or tool output; those fields are intentionally omitted from the input.
+8. Detect the dominant language used by the user across the turns and generate the progress tree in that same language. Prefer the user's language over the assistant's.
+9. Every goal and every step must include a non-empty string "id". Preserve IDs from the current tree where possible; when a node is new, create a stable unique ID from its subject and promptId.
+10. Every step must include the exact promptId of the conversation turn it represents.
+11. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.`;
 
 function buildPrompt(tree: ProgressTree, turns: ConversationTurn[], strict = false): string {
   const base = `Current Progress Tree:
@@ -231,9 +232,7 @@ export function summarizeTurns(
     lineEnd: turn.lineEnd,
     timestamp: turn.timestamp,
     userText: truncateText(turn.userText, maxFieldLength),
-    thinkingText: truncateText(turn.thinkingText, maxFieldLength),
     assistantText: truncateText(turn.assistantText, maxFieldLength),
-    toolText: truncateText(turn.toolText, maxFieldLength),
   }));
 }
 function truncateText(text: string | undefined, maxLength: number): string | undefined {
