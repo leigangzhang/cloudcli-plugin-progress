@@ -1,10 +1,18 @@
  import { ConversationBuffer } from './buffer.js';
- import type { ConversationSegment, DiffDetector, LogEntry } from './types.js';
+ import { isCodexProgressEntry } from './codex/parser.js';
+ import type {
+   ConversationSegment,
+   DiffDetector,
+   LogEntry,
+   LogProvider,
+   SessionLogEntry,
+ } from './types.js';
 
  export interface DiffDetectorOptions {
    debounceMs?: number;
    minIntervalMs?: number;
    segmentLimit?: number;
+   provider?: LogProvider;
  }
 
  export class DiffDetectorImpl implements DiffDetector {
@@ -13,18 +21,23 @@
    private debounceTimer: ReturnType<typeof setTimeout> | null = null;
    private lastTriggerTime = 0;
    private options: Required<DiffDetectorOptions>;
+   private provider: LogProvider;
 
    constructor(buffer: ConversationBuffer, options: DiffDetectorOptions = {}) {
      this.buffer = buffer;
+     this.provider = options.provider ?? 'claude';
      this.options = {
        debounceMs: options.debounceMs ?? 3000,
        minIntervalMs: options.minIntervalMs ?? 3000,
        segmentLimit: options.segmentLimit ?? 10,
+       provider: this.provider,
      };
    }
 
-   ingest(entry: LogEntry): void {
-     this.buffer.push(entry);
+   ingest(entry: SessionLogEntry): void {
+     if (this.provider === 'claude') {
+       this.buffer.push(entry as LogEntry);
+     }
      if (this.isRelevant(entry)) {
        this.scheduleTrigger();
      }
@@ -48,15 +61,19 @@
      this.fire();
    }
 
-   private isRelevant(entry: LogEntry): boolean {
-     if (entry.type === 'assistant') {
-       if (entry.stopReason === 'end_turn') {
+   private isRelevant(entry: SessionLogEntry): boolean {
+     if (this.provider === 'codex') {
+       return isCodexProgressEntry(entry);
+     }
+     const claudeEntry = entry as LogEntry;
+     if (claudeEntry.type === 'assistant') {
+       if (claudeEntry.stopReason === 'end_turn') {
          return true;
        }
-       const blocks = entry.content ?? [];
+       const blocks = claudeEntry.content ?? [];
        return blocks.some((b) => b.type === 'thinking' || b.type === 'tool_use');
      }
-     return entry.type === 'user';
+     return claudeEntry.type === 'user';
    }
 
    private scheduleTrigger(): void {
@@ -81,8 +98,11 @@
        return;
      }
      this.lastTriggerTime = now;
-     const segments = this.buffer.getSegments(this.options.segmentLimit);
-     if (segments.length > 0) {
+     const segments =
+       this.provider === 'claude'
+         ? this.buffer.getSegments(this.options.segmentLimit)
+         : [];
+     if (this.provider === 'codex' || segments.length > 0) {
        this.listeners.forEach((cb) => cb(segments));
      }
    }

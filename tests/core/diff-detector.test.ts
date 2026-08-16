@@ -1,7 +1,7 @@
  import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
  import { ConversationBuffer } from '../../src/core/buffer.js';
  import { DiffDetectorImpl } from '../../src/core/diff-detector.js';
- import type { ConversationSegment, LogEntry } from '../../src/core/types.js';
+import type { ConversationSegment, LogEntry, SessionLogEntry } from '../../src/core/types.js';
 
  describe('DiffDetectorImpl', () => {
    beforeEach(() => {
@@ -127,6 +127,52 @@
        content: [{ type: 'thinking', thinking: 'now' }],
      } as LogEntry);
      detector.flush();
+     expect(triggers.length).toBe(1);
+   });
+
+   it('triggers Codex mode without storing raw events in the Claude buffer', () => {
+     const buffer = new ConversationBuffer();
+     const detector = new DiffDetectorImpl(buffer, {
+       debounceMs: 300,
+       minIntervalMs: 300,
+       provider: 'codex',
+     });
+     const triggers: ConversationSegment[][] = [];
+     detector.onTrigger((segments) => triggers.push(segments));
+
+     detector.ingest({
+       type: 'response_item',
+       payload: { type: 'function_call', name: 'exec_command' },
+     });
+     detector.ingest({
+       type: 'event_msg',
+       payload: { type: 'task_complete', turn_id: 'turn-1' },
+     });
+     vi.advanceTimersByTime(400);
+
+     expect(triggers.length).toBe(1);
+     expect(triggers[0]).toEqual([]);
+     expect(buffer.getTurns()).toEqual([]);
+   });
+
+   it('triggers Codex mode for assistant output text', () => {
+     const buffer = new ConversationBuffer();
+     const detector = new DiffDetectorImpl(buffer, {
+       debounceMs: 300,
+       minIntervalMs: 300,
+       provider: 'codex',
+     });
+     const triggers: ConversationSegment[][] = [];
+     detector.onTrigger((segments) => triggers.push(segments));
+     detector.ingest({
+       type: 'response_item',
+       payload: {
+         type: 'message',
+         role: 'assistant',
+         content: [{ type: 'output_text', text: 'progress update' }],
+       },
+     } as SessionLogEntry);
+     vi.advanceTimersByTime(400);
      expect(triggers.length).toBe(1);
    });
  });

@@ -6,10 +6,11 @@
    ProgressResponse,
    RefreshRequest,
    ServerMessage,
+   SessionLogEntry,
    WatchRequest,
  } from './types.js';
 
- export function isLogEntry(value: unknown): value is LogEntry {
+ export function isLogEntry(value: unknown): value is SessionLogEntry {
    return (
      typeof value === 'object' &&
      value !== null &&

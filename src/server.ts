@@ -3,6 +3,7 @@ import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { pathToFileURL } from 'node:url';
 import { ConversationBuffer } from './core/buffer.js';
+import { buildCodexTurnsFromLog } from './core/codex/parser.js';
 import { loadConfig, redactApiKey } from './core/config.js';
 import { DiffDetectorImpl } from './core/diff-detector.js';
 import { LLMExtractionEngineImpl } from './core/extractor.js';
@@ -12,12 +13,15 @@ import { ProgressStoreImpl } from './core/store.js';
 import { buildTurnsFromLog } from './core/turns.js';
 import { FileLogWatcher } from './core/watcher.js';
 import type {
+  ConversationTurn,
   LLMConfig,
   LLMExtractionEngine,
   LogEntry,
+  LogProvider,
   ProgressResponse,
   ProgressTree,
   ServerMessage,
+  SessionLogEntry,
 } from './core/types.js';
 
 export interface ProgressServerOptions {
@@ -33,6 +37,7 @@ interface SessionState {
   projectPath: string;
   sessionId: string;
   cloudcliSessionId: string;
+  provider: LogProvider;
   watcher: FileLogWatcher;
   buffer: ConversationBuffer;
   detector: DiffDetectorImpl;
@@ -129,7 +134,7 @@ export class ProgressServer {
       if (!extractor) return;
       this.setStatus(session.sessionId, 'syncing');
       try {
-        const turns = session.buffer.getTurns();
+        const turns = this.getSessionTurns(session);
         const updated = await extractor.extract(session.store.getState(), turns);
         session.store.setState(updated);
         this.setStatus(session.sessionId, 'idle');
@@ -155,6 +160,18 @@ export class ProgressServer {
     });
   }
 
+  private getSessionTurns(session: SessionState): ConversationTurn[] {
+    const logPath = session.watcher.getFilePath();
+    if (session.provider === 'codex') {
+      return logPath && fs.existsSync(logPath)
+        ? buildCodexTurnsFromLog(logPath)
+        : [];
+    }
+    return logPath && fs.existsSync(logPath)
+      ? buildTurnsFromLog(logPath)
+      : session.buffer.getTurns();
+  }
+
   private async getOrCreateSession(
     cloudcliSessionId: string,
     projectPath: string,
@@ -173,15 +190,24 @@ export class ProgressServer {
       session.cloudcliSessionId = cloudcliSessionId;
       if (projectPath && session.projectPath !== projectPath) {
         session.projectPath = projectPath;
+        session.provider = resolved.provider;
         session.extractor = undefined;
         this.createSessionExtractor(session);
+        session.buffer = new ConversationBuffer();
+        session.detector = new DiffDetectorImpl(session.buffer, {
+          ...this.options.detectorOptions,
+          provider: resolved.provider,
+        });
+        this.bindDetector(session);
         session.watcher.stop();
         session.watcher = new FileLogWatcher({ projectsDir: this.options.projectsDir });
-        session.watcher.onLine((entry: LogEntry) => {
-          session!.buffer.push(entry);
+        session.watcher.onLine((entry: SessionLogEntry) => {
+          if (session!.provider === 'claude') {
+            session!.buffer.push(entry as LogEntry);
+          }
           session!.detector.ingest(entry);
         });
-        await session.watcher.start(projectPath, realSessionId);
+        await session.watcher.startWithPath(resolved.logPath);
         const logPath = session.watcher.getFilePath();
         if (logPath && !fs.existsSync(logPath)) {
           this.setStatus(realSessionId, 'error', `Session log not found: ${logPath}`);
@@ -192,13 +218,17 @@ export class ProgressServer {
 
     const buffer = new ConversationBuffer();
     const store = new ProgressStoreImpl({ snapshotDir: this.options.snapshotDir });
-    const detector = new DiffDetectorImpl(buffer, this.options.detectorOptions);
+    const detector = new DiffDetectorImpl(buffer, {
+      ...this.options.detectorOptions,
+      provider: resolved.provider,
+    });
     const watcher = new FileLogWatcher({ projectsDir: this.options.projectsDir });
 
     session = {
       projectPath,
       sessionId: realSessionId,
       cloudcliSessionId,
+      provider: resolved.provider,
       watcher,
       buffer,
       detector,
@@ -219,8 +249,10 @@ export class ProgressServer {
       }
     });
 
-    watcher.onLine((entry: LogEntry) => {
-      session!.buffer.push(entry);
+    watcher.onLine((entry: SessionLogEntry) => {
+      if (session!.provider === 'claude') {
+        session!.buffer.push(entry as LogEntry);
+      }
       session!.detector.ingest(entry);
     });
 
@@ -228,7 +260,7 @@ export class ProgressServer {
       store.setState({ version: 0, goals: [] });
     }
 
-    await watcher.start(projectPath, realSessionId);
+    await watcher.startWithPath(resolved.logPath);
     const logPath = watcher.getFilePath();
     if (logPath && !fs.existsSync(logPath)) {
       this.setStatus(realSessionId, 'error', `Session log not found: ${logPath}`);
@@ -362,8 +394,7 @@ export class ProgressServer {
     }
     this.setStatus(sessionId, 'syncing');
     try {
-      const logPath = session.watcher.getFilePath();
-      const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : session.buffer.getTurns();
+      const turns = this.getSessionTurns(session);
       const updated = await extractor.extract(
         session.store.getState(),
         turns,
@@ -403,8 +434,7 @@ export class ProgressServer {
       res.end(JSON.stringify({ error: 'Session not found' }));
       return;
     }
-    const logPath = session.watcher.getFilePath();
-    const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : session.buffer.getTurns();
+    const turns = this.getSessionTurns(session);
     const turn = turns.find((t) => t.promptId === promptId);
     if (!turn) {
       res.writeHead(404);
@@ -430,7 +460,7 @@ export class ProgressServer {
       return;
     }
     const logPath = session.watcher.getFilePath();
-    const turns = logPath && fs.existsSync(logPath) ? buildTurnsFromLog(logPath) : [];
+    const turns = this.getSessionTurns(session);
     const extractor = session.extractor;
     const config = extractor ? undefined : this.config;
     res.writeHead(200);
@@ -439,6 +469,7 @@ export class ProgressServer {
         projectPath: session.projectPath,
         requestedSessionId: session.cloudcliSessionId,
         sessionId: session.sessionId,
+        provider: session.provider,
         logPath,
         logExists: logPath ? fs.existsSync(logPath) : false,
         apiKeyConfigured: !!(extractor || this.config.apiKey),

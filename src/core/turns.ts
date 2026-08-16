@@ -123,7 +123,7 @@ export function buildTurnsFromLog(logPath: string): ConversationTurn[] {
     if (!line.trim()) continue;
     const parsed = parseJsonLine(line);
     if (isLogEntry(parsed)) {
-      entries.push({ entry: parsed, lineNumber: i + 1 });
+      entries.push({ entry: parsed as LogEntry, lineNumber: i + 1 });
     }
   }
   return buildTurns(entries);

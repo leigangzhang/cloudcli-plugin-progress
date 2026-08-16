@@ -1,6 +1,14 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import type { LogProvider } from './types.js';
+
+const require = createRequire(import.meta.url);
+
+function databaseSync(): typeof import('node:sqlite').DatabaseSync {
+  return require('node:sqlite').DatabaseSync;
+}
 
 export function encodeProjectPath(projectPath: string): string {
   if (projectPath === '/') return '-';
@@ -12,6 +20,7 @@ export function encodeProjectPath(projectPath: string): string {
 export interface ResolvedLogPath {
   logPath: string;
   realSessionId: string;
+  provider: LogProvider;
 }
 
 export function resolveLogPath(
@@ -98,6 +107,7 @@ function findActiveSessionForProject(
 }
 
 interface CloudCliSessionRow {
+  provider?: string;
   provider_session_id?: string;
   jsonl_path?: string;
 }
@@ -107,17 +117,22 @@ async function resolveFromCloudCliDatabase(
   dbPath = process.env.DATABASE_PATH ?? path.join(os.homedir(), '.cloudcli', 'auth.db'),
 ): Promise<CloudCliSessionRow | undefined> {
   try {
-    const { DatabaseSync } = await import('node:sqlite');
+    const DatabaseSync = databaseSync();
     const db = new DatabaseSync(dbPath, { readOnly: true });
     try {
       const stmt = db.prepare(
-        'SELECT provider_session_id, jsonl_path FROM sessions WHERE session_id = ? LIMIT 1',
+        'SELECT provider, provider_session_id, jsonl_path FROM sessions WHERE session_id = ? LIMIT 1',
       );
       const row = stmt.get(cloudcliSessionId) as
-        | { provider_session_id?: string | null; jsonl_path?: string | null }
+        | {
+            provider?: string | null;
+            provider_session_id?: string | null;
+            jsonl_path?: string | null;
+          }
         | undefined;
       if (!row) return undefined;
       return {
+        provider: row.provider ?? undefined,
         provider_session_id: row.provider_session_id ?? undefined,
         jsonl_path: row.jsonl_path ?? undefined,
       };
@@ -129,6 +144,62 @@ async function resolveFromCloudCliDatabase(
   }
 }
 
+function findFiles(dir: string): string[] {
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    return entries.flatMap((entry) => {
+      const fullPath = path.join(dir, entry.name);
+      return entry.isDirectory() ? findFiles(fullPath) : [fullPath];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function findCodexRollout(
+  sessionId: string,
+  codexHome = path.join(os.homedir(), '.codex'),
+): string | undefined {
+  for (const dir of [
+    path.join(codexHome, 'sessions'),
+    path.join(codexHome, 'archived_sessions'),
+  ]) {
+    const match = findFiles(dir).find((file) => file.endsWith(`${sessionId}.jsonl`));
+    if (match && fs.existsSync(match)) return match;
+  }
+  return undefined;
+}
+
+async function resolveCodexFromStateDb(
+  sessionId: string,
+  codexHome = path.join(os.homedir(), '.codex'),
+): Promise<string | undefined> {
+  try {
+    const DatabaseSync = databaseSync();
+    const db = new DatabaseSync(path.join(codexHome, 'state_5.sqlite'), { readOnly: true });
+    try {
+      const row = db
+        .prepare('SELECT rollout_path FROM threads WHERE id = ? LIMIT 1')
+        .get(sessionId) as { rollout_path?: string | null } | undefined;
+      const rolloutPath = row?.rollout_path;
+      return rolloutPath && fs.existsSync(rolloutPath) ? rolloutPath : undefined;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveCodexSessionLogPath(
+  sessionId: string,
+): Promise<ResolvedLogPath | undefined> {
+  const logPath =
+    (await resolveCodexFromStateDb(sessionId)) ?? findCodexRollout(sessionId);
+  if (!logPath) return undefined;
+  return { logPath, realSessionId: sessionId, provider: 'codex' };
+}
+
 export async function resolveSessionLogPath(
   projectPath: string,
   cloudcliSessionId: string,
@@ -136,7 +207,7 @@ export async function resolveSessionLogPath(
 ): Promise<ResolvedLogPath> {
   const exactPath = resolveLogPath(projectPath, cloudcliSessionId, projectsDir);
   if (fs.existsSync(exactPath)) {
-    return { logPath: exactPath, realSessionId: cloudcliSessionId };
+    return { logPath: exactPath, realSessionId: cloudcliSessionId, provider: 'claude' };
   }
 
   // CloudCLI maintains a SQLite mapping from app-facing session_id to
@@ -144,11 +215,20 @@ export async function resolveSessionLogPath(
   const dbRow = await resolveFromCloudCliDatabase(cloudcliSessionId);
   if (dbRow?.provider_session_id) {
     const realSessionId = dbRow.provider_session_id;
-    const logPath = dbRow.jsonl_path ?? resolveLogPath(projectPath, realSessionId, projectsDir);
-    if (fs.existsSync(logPath)) {
-      return { logPath, realSessionId };
+    const provider: LogProvider = dbRow.provider === 'codex' ? 'codex' : 'claude';
+    const logPath: string | undefined =
+      dbRow.jsonl_path && fs.existsSync(dbRow.jsonl_path)
+        ? dbRow.jsonl_path
+        : provider === 'codex'
+          ? (await resolveCodexSessionLogPath(realSessionId))?.logPath
+          : resolveLogPath(projectPath, realSessionId, projectsDir);
+    if (logPath && fs.existsSync(logPath)) {
+      return { logPath, realSessionId, provider };
     }
   }
+
+  const codexResolved = await resolveCodexSessionLogPath(cloudcliSessionId);
+  if (codexResolved) return codexResolved;
 
   // Fallback: scan Claude Code CLI PID metadata to find an active session for
   // the same project.
@@ -156,7 +236,7 @@ export async function resolveSessionLogPath(
   if (activeSessionId) {
     const activePath = resolveLogPath(projectPath, activeSessionId, projectsDir);
     if (fs.existsSync(activePath)) {
-      return { logPath: activePath, realSessionId: activeSessionId };
+      return { logPath: activePath, realSessionId: activeSessionId, provider: 'claude' };
     }
   }
 
@@ -166,8 +246,9 @@ export async function resolveSessionLogPath(
     return {
       logPath: latestPath,
       realSessionId: path.basename(latestPath, '.jsonl'),
+      provider: 'claude',
     };
   }
 
-  return { logPath: exactPath, realSessionId: cloudcliSessionId };
+  return { logPath: exactPath, realSessionId: cloudcliSessionId, provider: 'claude' };
 }

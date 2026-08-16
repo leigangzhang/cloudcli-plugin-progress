@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import readline from 'node:readline';
 import { resolveSessionLogPath } from './paths.js';
 import { isLogEntry, parseJsonLine } from './protocol.js';
 export class FileLogWatcher {
@@ -11,6 +10,7 @@ export class FileLogWatcher {
         this.pollTimer = null;
         this.readTimer = null;
         this.listeners = [];
+        this.pendingPartialLine = '';
         this.stopped = false;
         this.options = {
             watchImpl: options.watchImpl ?? 'auto',
@@ -20,7 +20,14 @@ export class FileLogWatcher {
         };
     }
     async start(projectPath, sessionId) {
-        this.filePath = (await resolveSessionLogPath(projectPath, sessionId, this.options.projectsDir)).logPath;
+        const filePath = (await resolveSessionLogPath(projectPath, sessionId, this.options.projectsDir)).logPath;
+        await this.startWithPath(filePath);
+    }
+    async startWithPath(filePath) {
+        this.filePath = filePath;
+        this.position = 0;
+        this.lineCount = 0;
+        this.pendingPartialLine = '';
         await this.readNewLines();
         this.watch();
     }
@@ -96,17 +103,27 @@ export class FileLogWatcher {
         if (size < this.position) {
             this.position = 0;
             this.lineCount = 0;
+            this.pendingPartialLine = '';
         }
         if (size === this.position) {
             return;
         }
+        let buffer = this.pendingPartialLine;
         const stream = fs.createReadStream(this.filePath, {
             start: this.position,
             end: size - 1,
             encoding: 'utf-8',
         });
-        const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-        for await (const line of rl) {
+        for await (const chunk of stream) {
+            buffer += chunk;
+            const lines = buffer.split(/\r?\n/);
+            this.pendingPartialLine = lines.pop() ?? '';
+            this.emitLines(lines);
+        }
+        this.position = size;
+    }
+    emitLines(lines) {
+        for (const line of lines) {
             if (!line)
                 continue;
             this.lineCount++;
@@ -115,7 +132,6 @@ export class FileLogWatcher {
                 this.listeners.forEach((cb) => cb(parsed));
             }
         }
-        this.position = size;
     }
 }
 //# sourceMappingURL=watcher.js.map

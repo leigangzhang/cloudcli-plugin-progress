@@ -1,5 +1,5 @@
-import type { ClientMessage, LogEntry, ProgressResponse, RefreshRequest, ServerMessage, WatchRequest } from './types.js';
-export declare function isLogEntry(value: unknown): value is LogEntry;
+import type { ClientMessage, ProgressResponse, RefreshRequest, ServerMessage, SessionLogEntry, WatchRequest } from './types.js';
+export declare function isLogEntry(value: unknown): value is SessionLogEntry;
 export declare function isWatchRequest(value: unknown): value is WatchRequest;
 export declare function isRefreshRequest(value: unknown): value is RefreshRequest;
 export declare function isProgressResponse(value: unknown): value is ProgressResponse;
