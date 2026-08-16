@@ -143,6 +143,135 @@ describe('LLMExtractionEngineImpl', () => {
     await expect(engine.extract(tree, [])).rejects.toThrow(/status/);
   });
 
+  it('repairs missing goal and step ids from the previous tree', async () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'goal-1',
+          subject: 'First topic',
+          status: 'completed',
+          steps: [
+            {
+              id: 'step-1-1',
+              subject: 'First turn',
+              status: 'completed',
+              promptId: 'p1',
+            },
+          ],
+        },
+        {
+          id: 'goal-2',
+          subject: 'Second topic',
+          status: 'in_progress',
+          steps: [
+            {
+              id: 'step-2-1',
+              subject: 'Second turn',
+              status: 'completed',
+              promptId: 'p2',
+            },
+            {
+              id: 'step-2-2',
+              subject: 'Third turn',
+              status: 'completed',
+              promptId: 'p3',
+            },
+          ],
+        },
+      ],
+    };
+    const client = mockClient({
+      text: JSON.stringify({
+        version: 2,
+        goals: [
+          {
+            id: '',
+            subject: 'First topic updated',
+            status: 'completed',
+            steps: [
+              {
+                id: '',
+                subject: 'First turn updated',
+                status: 'completed',
+                promptId: 'p1',
+              },
+            ],
+          },
+          {
+            id: '',
+            subject: 'Second topic updated',
+            status: 'in_progress',
+            steps: [
+              {
+                id: '',
+                subject: 'Second turn updated',
+                status: 'completed',
+                promptId: 'p2',
+              },
+              {
+                id: '',
+                subject: 'Third turn updated',
+                status: 'completed',
+                promptId: 'p3',
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, []);
+
+    expect(result.goals.map((goal) => goal.id)).toEqual(['goal-1', 'goal-2']);
+    expect(result.goals[0].steps[0].id).toBe('step-1-1');
+    expect(result.goals[1].steps.map((step) => step.id)).toEqual([
+      'step-2-1',
+      'step-2-2',
+    ]);
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps generated fallback ids stable across incremental extraction', async () => {
+    const client = mockClient({
+      text: JSON.stringify({
+        version: 2,
+        goals: [
+          {
+            id: '',
+            subject: 'New topic',
+            status: 'pending',
+            steps: [
+              {
+                id: '',
+                subject: 'New turn',
+                status: 'pending',
+                promptId: 'new-prompt',
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const turns: ConversationTurn[] = [
+      {
+        promptId: 'new-prompt',
+        lineStart: 1,
+        lineEnd: 2,
+        userText: 'new turn',
+        timestamp: '2026-01-01T00:00:00Z',
+      },
+    ];
+
+    const first = await engine.extract({ version: 0, goals: [] }, turns);
+    const second = await engine.extract(first, turns);
+
+    expect(second.goals[0].id).toBe(first.goals[0].id);
+    expect(second.goals[0].steps[0].id).toBe(first.goals[0].steps[0].id);
+    expect(client.messages.create).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects a step without promptId', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const client = mockClient({
