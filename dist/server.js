@@ -98,9 +98,11 @@ export class ProgressServer {
             const extractor = this.chooseExtractor(session);
             if (!extractor)
                 return;
+            const turns = this.getPendingTurns(session, this.getSessionTurns(session));
+            if (turns.length === 0)
+                return;
             this.setStatus(session.sessionId, 'syncing');
             try {
-                const turns = this.getSessionTurns(session);
                 const updated = await extractor.extract(session.store.getState(), turns, undefined, this.buildTraceContext(session, 'incremental'));
                 session.store.setState(updated);
                 this.setStatus(session.sessionId, 'idle');
@@ -135,6 +137,15 @@ export class ProgressServer {
         return logPath && fs.existsSync(logPath)
             ? buildTurnsFromLog(logPath)
             : session.buffer.getTurns();
+    }
+    getPendingTurns(session, turns) {
+        const processedPromptIds = new Set();
+        for (const goal of session.store.getState().goals) {
+            for (const step of goal.steps ?? []) {
+                processedPromptIds.add(step.promptId);
+            }
+        }
+        return turns.filter((turn) => !processedPromptIds.has(turn.promptId));
     }
     buildTraceContext(session, mode) {
         return {

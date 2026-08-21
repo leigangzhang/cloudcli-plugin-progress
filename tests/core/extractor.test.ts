@@ -419,9 +419,9 @@ describe('LLMExtractionEngineImpl', () => {
     expect(summarized[0]).not.toHaveProperty('thinkingText');
     expect(summarized[0]).not.toHaveProperty('toolText');
   });
-  it('retries with only the last 5 turns when JSON parsing fails', async () => {
+  it('retries a failed 5-turn chunk with a stricter prompt', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
-    const turns: ConversationTurn[] = Array.from({ length: 10 }, (_, i) => ({
+    const turns: ConversationTurn[] = Array.from({ length: 5 }, (_, i) => ({
       promptId: `p${i + 1}`,
       lineStart: i * 2 + 1,
       lineEnd: i * 2 + 2,
@@ -444,10 +444,8 @@ describe('LLMExtractionEngineImpl', () => {
     expect(result).toEqual({ version: 2, goals: [] });
     expect(client.messages.create).toHaveBeenCalledTimes(2);
     const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
-    expect(secondPrompt).toContain('"promptId": "p6"');
-    expect(secondPrompt).toContain('"promptId": "p10"');
-    expect(secondPrompt).not.toContain('"promptId": "p1"');
-    expect(secondPrompt).not.toContain('"promptId": "p5"');
+    expect(secondPrompt).toContain('"promptId": "p1"');
+    expect(secondPrompt).toContain('"promptId": "p5"');
   });
 
   it('uses polling mode to extract in 5-turn chunks incrementally', async () => {
@@ -529,9 +527,9 @@ describe('LLMExtractionEngineImpl', () => {
     const result = await engine.extract(tree, []);
     expect(result).toEqual({ version: 2, goals: [] });
   });
-  it('retries with the last 5 turns when the response contains malformed JSON', async () => {
+  it('retries a 5-turn chunk when the response contains malformed JSON', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
-    const turns: ConversationTurn[] = Array.from({ length: 10 }, (_, i) => ({
+    const turns: ConversationTurn[] = Array.from({ length: 5 }, (_, i) => ({
       promptId: `p${i + 1}`,
       lineStart: i * 2 + 1,
       lineEnd: i * 2 + 2,
@@ -557,8 +555,8 @@ describe('LLMExtractionEngineImpl', () => {
     expect(result).toEqual({ version: 2, goals: [] });
     expect(client.messages.create).toHaveBeenCalledTimes(2);
     const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
-    expect(secondPrompt).toContain('"promptId": "p6"');
-    expect(secondPrompt).not.toContain('"promptId": "p1"');
+    expect(secondPrompt).toContain('"promptId": "p1"');
+    expect(secondPrompt).toContain('"promptId": "p5"');
   });
 
   it('retries a failed chunk in polling mode before giving up', async () => {

@@ -27,6 +27,7 @@ export declare class ProgressServer {
     private bindDetector;
     private migrateClients;
     private getSessionTurns;
+    private getPendingTurns;
     private buildTraceContext;
     private traceExtraction;
     private getOrCreateSession;

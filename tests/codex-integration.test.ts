@@ -159,6 +159,9 @@ describe('ProgressServer Codex sessions', () => {
       mode: 'incremental',
       parseScope: 'full_file',
     });
+    expect(
+      (incrementalCall[1] as { promptId: string }[]).map((turn) => turn.promptId),
+    ).toEqual(['turn-2']);
     const turn = await fetchJson(
       port,
       'GET',

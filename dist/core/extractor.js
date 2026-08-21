@@ -184,7 +184,7 @@ function extractJsonObject(text) {
     }
     return text.slice(start, end + 1);
 }
-export function summarizeTurns(turns, turnLimit = 20, maxFieldLength = 2000) {
+export function summarizeTurns(turns, turnLimit = 5, maxFieldLength = 2000) {
     return turns.slice(-turnLimit).map((turn) => ({
         promptId: turn.promptId,
         lineStart: turn.lineStart,
@@ -245,16 +245,14 @@ export class LLMExtractionEngineImpl {
                 metrics: measureConversationTurns(turns),
             });
         }
-        if (this.config.usePolling && turns.length > 5) {
-            return this.extractByPolling(tree, turns, onProgress, traceContext);
+        if (turns.length === 0) {
+            return this.extractWithRetry(tree, turns, traceContext);
         }
-        const result = await this.extractWithRetry(tree, turns, traceContext);
-        onProgress?.(result);
-        return result;
+        return this.extractByPolling(tree, turns, onProgress, traceContext);
     }
     async extractWithRetry(tree, turns, traceContext) {
         try {
-            return await this.doExtract(tree, summarizeTurns(turns, 20), false, traceContext, 1);
+            return await this.doExtract(tree, summarizeTurns(turns, 5), false, traceContext, 1);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -266,7 +264,7 @@ export class LLMExtractionEngineImpl {
                 return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
             }
             // Retry once with a stricter prompt before giving up.
-            return await this.doExtract(tree, summarizeTurns(turns, 20), true, traceContext, 2);
+            return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
         }
     }
     async extractByPolling(tree, turns, onProgress, traceContext) {

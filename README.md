@@ -13,7 +13,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
 - **LLM-powered extraction** — Calls the configured LLM to turn conversation turns into a structured progress tree. Only each turn's user question is sent to the LLM; assistant replies, reasoning, and tool output are not submitted. Output follows the dominant user language and keeps subjects and descriptions concise.
 - **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
-- **Large-session polling** — Enable with `PROGRESS_USE_POLLING=true`. Long sessions are processed in 5-turn chunks; each intermediate result is pushed to the UI immediately via WebSocket.
+- **Five-turn polling** — Sessions are processed in 5-turn chunks. Incremental triggers only send turns that do not yet have a progress step, so old conversation turns are not repeatedly sent to the LLM.
 - **Large-session fallback** — If the model returns empty or malformed JSON, the plugin truncates each turn and retries with only the last 5 turns.
 - **Codex rollout parsing** — Codex turns are grouped by `turn_id`, including user messages, summarized reasoning, assistant output, and tool calls. V1 tracks the mapped root thread; spawned subagent rollouts are not merged automatically.
 - **WebSocket live updates** — Progress and status changes are pushed to the UI without polling.
@@ -50,7 +50,7 @@ Configuration is read in the following priority order:
 | `PROGRESS_MODEL` / `ANTHROPIC_MODEL` / `MODEL` | No | Extraction model. Defaults to `claude-3-5-sonnet-20241022`. |
 | `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to and is capped at `4096`. |
 | `TIMEOUT_MS` / `PROGRESS_TIMEOUT_MS` / `ANTHROPIC_TIMEOUT_MS` | No | LLM request timeout in milliseconds. Defaults to `60000`. |
-| `PROGRESS_USE_POLLING` | No | Enable polling extraction for large sessions. Defaults to `false`. |
+| `PROGRESS_USE_POLLING` | No | Deprecated compatibility flag. All extractions now use 5-turn chunks. |
 | `PROGRESS_TRACE_EXTRACTIONS` | No | Log full Codex conversation text, final prompts, and token usage as JSON lines. Defaults to `false`. |
 | `PROGRESS_TRACE_LOG_DIR` | No | Trace log directory. Defaults to `~/.claude-code-ui/plugins/cloudcli-plugin-progress`. |
 | `PROGRESS_TRACE_LOG_FILE` | No | Trace log filename. Defaults to `progress-plugin.log`. |
@@ -142,19 +142,18 @@ The plugin listens on a random local port; CloudCLI proxies `/api/plugins/progre
   - `{ "type": "progress", "tree": { ... } }`
   - `{ "type": "status", "status": "idle|syncing|error|paused", "error": "..." }`
 
-## Large-session polling mode
+## Five-turn polling mode
 
-Set `PROGRESS_USE_POLLING=true` to handle long sessions without exceeding the model context window.
+Extraction now always works in 5-turn chunks:
 
-How it works:
+1. Incremental extraction filters out turns whose `promptId` already exists in the current progress tree.
+2. Remaining turns are split into 5-turn chunks.
+3. Each chunk is extracted sequentially, using the result of the previous chunk as the current tree.
+4. After every chunk the intermediate tree is saved to the store and broadcast to the UI via WebSocket, so you see progress appear gradually instead of waiting for the whole session.
+5. If the model returns empty or malformed JSON, the chunk retries with a stricter prompt.
+6. If the accumulated tree makes a later chunk fail, that chunk is retried with an empty tree as a last resort.
 
-1. The full conversation is split into 5-turn chunks.
-2. Each chunk is extracted sequentially, using the result of the previous chunk as the current tree.
-3. After every chunk the intermediate tree is saved to the store and broadcast to the UI via WebSocket, so you see progress appear gradually instead of waiting for the whole session.
-4. Each chunk also uses the same retry logic as normal mode: if the model returns empty or malformed JSON, it retries with a stricter prompt.
-5. If the accumulated tree makes a later chunk fail, that chunk is retried with an empty tree as a last resort.
-
-Recommended for sessions larger than a few dozen turns or when the default mode returns JSON errors.
+Manual `/refresh` still processes the complete session log in 5-turn chunks.
 
 ## Troubleshooting
 
