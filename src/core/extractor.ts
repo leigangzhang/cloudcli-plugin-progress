@@ -309,32 +309,17 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       });
     }
     if (turns.length === 0) {
-      return this.extractWithRetry(tree, turns, traceContext);
+      return this.extractChunk(tree, turns, traceContext);
     }
     return this.extractByPolling(tree, turns, onProgress, traceContext);
   }
 
-  private async extractWithRetry(
+  private async extractChunk(
     tree: ProgressTree,
     turns: ConversationTurn[],
     traceContext?: ExtractionTraceContext,
   ): Promise<ProgressTree> {
-    try {
-      return await this.doExtract(tree, summarizeTurns(turns, 5), false, traceContext, 1);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (
-        message.includes('No JSON object found in response') ||
-        message.includes('JSON') ||
-        message.includes('SyntaxError')
-      ) {
-        // Prompt likely too large or model returned malformed JSON; retry with
-        // only the last 5 summarized turns and a stricter prompt.
-        return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
-      }
-      // Retry once with a stricter prompt before giving up.
-      return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
-    }
+    return await this.doExtract(tree, summarizeTurns(turns, 5), false, traceContext, 1);
   }
   private async extractByPolling(
     tree: ProgressTree,
@@ -354,18 +339,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
             chunkTotal: chunks.length,
           }
         : undefined;
-      try {
-        currentTree = await this.extractWithRetry(currentTree, chunk, chunkContext);
-      } catch (err) {
-        // If the accumulated tree makes the prompt too large, fall back to
-        // extracting this chunk independently before giving up.
-        console.warn('Chunk extraction failed with accumulated tree, retrying with empty tree:', (err as Error).message);
-        currentTree = await this.extractWithRetry(
-          { version: 0, goals: [] },
-          chunk,
-          chunkContext,
-        );
-      }
+      currentTree = await this.extractChunk(currentTree, chunk, chunkContext);
       onProgress?.(currentTree);
     }
     return currentTree;
@@ -405,39 +379,54 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       this.config.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       DEFAULT_MAX_OUTPUT_TOKENS,
     );
-    const response = await this.client.messages.create({
-      model: this.config.model,
-      max_tokens: maxTokens,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    const usage = response.usage;
-    if (traceContext && this.trace) {
-      this.trace({
-        type: 'usage',
-        context: traceContext,
-        attempt,
-        usage: usageTrace(usage as unknown as Record<string, number | undefined> | undefined),
+    try {
+      const response = await this.client.messages.create({
+        model: this.config.model,
+        max_tokens: maxTokens,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: prompt }],
       });
+      const usage = response.usage;
+      if (traceContext && this.trace) {
+        this.trace({
+          type: 'usage',
+          context: traceContext,
+          attempt,
+          usage: usageTrace(usage as unknown as Record<string, number | undefined> | undefined),
+        });
+      }
+      this.usageListeners.forEach((cb) =>
+        cb({
+          inputTokens: usage?.input_tokens ?? 0,
+          outputTokens: usage?.output_tokens ?? 0,
+        }),
+      );
+
+      const text = response.content
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join('');
+      const jsonText = extractJsonObject(text);
+      const parsed = repairProgressTreeIds(JSON.parse(jsonText) as ProgressTree, tree);
+
+      const errors = validateProgressTree(parsed);
+      if (errors.length > 0) {
+        throw new Error('Schema validation failed: ' + errors.join('; '));
+      }
+
+      return parsed;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (traceContext && this.trace) {
+        this.trace({
+          type: 'usage',
+          context: traceContext,
+          attempt,
+          usage: { inputTokens: 0, outputTokens: 0 },
+          error: message,
+          prompt,
+        });
+      }
+      throw err;
     }
-    this.usageListeners.forEach((cb) =>
-      cb({
-        inputTokens: usage?.input_tokens ?? 0,
-        outputTokens: usage?.output_tokens ?? 0,
-      }),
-    );
-
-    const text = response.content
-      .map((block) => (block.type === 'text' ? block.text : ''))
-      .join('');
-    const jsonText = extractJsonObject(text);
-    const parsed = repairProgressTreeIds(JSON.parse(jsonText) as ProgressTree, tree);
-
-    const errors = validateProgressTree(parsed);
-    if (errors.length > 0) {
-      throw new Error('Schema validation failed: ' + errors.join('; '));
-    }
-
-    return parsed;
   }
 }

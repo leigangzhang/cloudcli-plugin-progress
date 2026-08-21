@@ -68,30 +68,20 @@ describe('LLMExtractionEngineImpl', () => {
     expect(result).toEqual({ version: 2, goals: [] });
   });
 
-  it('retries once when the first response is invalid JSON', async () => {
+  it('does not retry when the response is invalid JSON', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const client = mockClient({ text: 'not json' });
-    client.messages.create = vi
-      .fn()
-      .mockResolvedValueOnce({
-        content: [{ type: 'text', text: 'not json' }],
-        usage: { input_tokens: 10, output_tokens: 5 },
-      })
-      .mockResolvedValueOnce({
-        content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [] }) }],
-        usage: { input_tokens: 10, output_tokens: 5 },
-      });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, []);
-    expect(result).toEqual({ version: 2, goals: [] });
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
+    await expect(engine.extract(tree, [])).rejects.toThrow(/No JSON object/);
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
-  it('throws when both attempts return invalid JSON', async () => {
+  it('throws when the response is invalid JSON', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const client = mockClient({ text: 'not json' });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
     await expect(engine.extract(tree, [])).rejects.toThrow();
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
   it('throws when the API call fails', async () => {
@@ -103,6 +93,51 @@ describe('LLMExtractionEngineImpl', () => {
     } as unknown as Anthropic;
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
     await expect(engine.extract(tree, [])).rejects.toThrow('network down');
+  });
+
+  it('logs the failed prompt and error in the usage trace', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const client = {
+      messages: {
+        create: vi.fn().mockRejectedValue(new Error('network down')),
+      },
+    } as unknown as Anthropic;
+    const trace = vi.fn<(event: ExtractionTraceEvent) => void>();
+    const engine = new LLMExtractionEngineImpl({
+      config: mockConfig(),
+      client,
+      trace,
+    });
+    const turns: ConversationTurn[] = [
+      {
+        promptId: 'failed-turn',
+        lineStart: 1,
+        lineEnd: 2,
+        userText: 'failed question',
+        timestamp: '2026-01-01T00:00:00Z',
+      },
+    ];
+    const context: ExtractionTraceContext = {
+      requestId: 'failed-request',
+      sessionId: 'codex-session',
+      provider: 'codex',
+      mode: 'incremental',
+      parseScope: 'full_file',
+    };
+
+    await expect(engine.extract(tree, turns, undefined, context)).rejects.toThrow(
+      'network down',
+    );
+
+    const events = trace.mock.calls.map(([event]) => event);
+    const usage = events.find(
+      (event): event is Extract<ExtractionTraceEvent, { type: 'usage' }> =>
+        event.type === 'usage',
+    );
+    expect(usage).toBeDefined();
+    expect(usage!.error).toBe('network down');
+    expect(usage!.prompt).toContain('failed question');
+    expect(usage!.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
   });
 
   it('emits token usage after extraction', async () => {
@@ -419,7 +454,7 @@ describe('LLMExtractionEngineImpl', () => {
     expect(summarized[0]).not.toHaveProperty('thinkingText');
     expect(summarized[0]).not.toHaveProperty('toolText');
   });
-  it('retries a failed 5-turn chunk with a stricter prompt', async () => {
+  it('does not retry a failed 5-turn chunk', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const turns: ConversationTurn[] = Array.from({ length: 5 }, (_, i) => ({
       promptId: `p${i + 1}`,
@@ -432,20 +467,12 @@ describe('LLMExtractionEngineImpl', () => {
       messages: {
         create: vi
           .fn()
-          .mockRejectedValueOnce(new Error('No JSON object found in response'))
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [] }) }],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
+          .mockRejectedValue(new Error('No JSON object found in response')),
       },
     } as unknown as Anthropic;
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, turns);
-    expect(result).toEqual({ version: 2, goals: [] });
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
-    const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
-    expect(secondPrompt).toContain('"promptId": "p1"');
-    expect(secondPrompt).toContain('"promptId": "p5"');
+    await expect(engine.extract(tree, turns)).rejects.toThrow(/No JSON object/);
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
   it('uses polling mode to extract in 5-turn chunks incrementally', async () => {
@@ -527,7 +554,7 @@ describe('LLMExtractionEngineImpl', () => {
     const result = await engine.extract(tree, []);
     expect(result).toEqual({ version: 2, goals: [] });
   });
-  it('retries a 5-turn chunk when the response contains malformed JSON', async () => {
+  it('does not retry a 5-turn chunk when the response contains malformed JSON', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const turns: ConversationTurn[] = Array.from({ length: 5 }, (_, i) => ({
       promptId: `p${i + 1}`,
@@ -543,23 +570,15 @@ describe('LLMExtractionEngineImpl', () => {
           .mockResolvedValueOnce({
             content: [{ type: 'text', text: '{"version":2,"goals":[' }],
             usage: { input_tokens: 10, output_tokens: 5 },
-          })
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: JSON.stringify({ version: 2, goals: [] }) }],
-            usage: { input_tokens: 10, output_tokens: 5 },
           }),
       },
     } as unknown as Anthropic;
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, turns);
-    expect(result).toEqual({ version: 2, goals: [] });
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
-    const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
-    expect(secondPrompt).toContain('"promptId": "p1"');
-    expect(secondPrompt).toContain('"promptId": "p5"');
+    await expect(engine.extract(tree, turns)).rejects.toThrow(/No JSON object/);
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
-  it('retries a failed chunk in polling mode before giving up', async () => {
+  it('stops at a failed polling chunk without empty-tree fallback', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const turns: ConversationTurn[] = Array.from({ length: 6 }, (_, i) => ({
       promptId: `p${i + 1}`,
@@ -615,15 +634,10 @@ describe('LLMExtractionEngineImpl', () => {
             usage: { input_tokens: 10, output_tokens: 5 },
           })
           .mockRejectedValueOnce(new Error('No JSON object found in response'))
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: JSON.stringify(treeAfterSecondChunk) }],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
       },
     } as unknown as Anthropic;
     const engine = new LLMExtractionEngineImpl({ config: mockPollingConfig(), client });
-    const result = await engine.extract(tree, turns);
-    expect(client.messages.create).toHaveBeenCalledTimes(3);
-    expect(result.goals.length).toBe(2);
+    await expect(engine.extract(tree, turns)).rejects.toThrow(/No JSON object/);
+    expect(client.messages.create).toHaveBeenCalledTimes(2);
   });
 });
