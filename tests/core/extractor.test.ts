@@ -172,7 +172,7 @@ describe('LLMExtractionEngineImpl', () => {
 
     const prompt = events[1] as Extract<ExtractionTraceEvent, { type: 'prompt' }>;
     expect(prompt.prompt).toContain('codex question');
-    expect(prompt.prompt).toContain('codex reply');
+    expect(prompt.prompt).not.toContain('codex reply');
     expect(prompt.prompt).not.toContain('private codex reasoning');
     expect(prompt.prompt).not.toContain('private tool output');
     expect(prompt.estimatedPromptTokens).toBeGreaterThan(0);
@@ -369,9 +369,10 @@ describe('LLMExtractionEngineImpl', () => {
     const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0].messages[0].content;
     expect(prompt).toContain('p1');
     expect(prompt).toContain('hello');
+    expect(prompt).not.toContain('hi');
   });
 
-  it('omits reasoning and tool output from the LLM prompt', async () => {
+  it('omits assistant replies, reasoning, and tool output from the LLM prompt', async () => {
     const tree: ProgressTree = { version: 1, goals: [] };
     const client = mockClient({
       text: JSON.stringify({ version: 2, goals: [] }),
@@ -392,12 +393,12 @@ describe('LLMExtractionEngineImpl', () => {
     await engine.extract(tree, turns);
     const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0].messages[0].content;
     expect(prompt).toContain('user question');
-    expect(prompt).toContain('model reply');
+    expect(prompt).not.toContain('model reply');
     expect(prompt).not.toContain('private reasoning');
     expect(prompt).not.toContain('private tool output');
   });
 
-  it('summarizeTurns truncates only user and assistant text', () => {
+  it('summarizeTurns keeps only truncated user text', () => {
     const longText = 'a'.repeat(5000);
     const turns: ConversationTurn[] = [
       {
@@ -414,7 +415,7 @@ describe('LLMExtractionEngineImpl', () => {
     const summarized = summarizeTurns(turns, 20, 2000);
     expect(summarized[0].userText).toHaveLength(2000 + '\n...[truncated]'.length);
     expect(summarized[0].userText).toContain('\n...[truncated]');
-    expect(summarized[0].assistantText).toContain('\n...[truncated]');
+    expect(summarized[0]).not.toHaveProperty('assistantText');
     expect(summarized[0]).not.toHaveProperty('thinkingText');
     expect(summarized[0]).not.toHaveProperty('toolText');
   });

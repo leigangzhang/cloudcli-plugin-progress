@@ -11,7 +11,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
   - **Step**: one conversation turn. Click a step to expand the original user question, model reasoning, and assistant reply.
 - **Local conversation records** — Step details are read from the local `.jsonl` file and rendered as Markdown. No raw conversation text is returned by the LLM.
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
-- **LLM-powered extraction** — Calls the configured LLM to turn conversation turns into a structured progress tree. Output follows the dominant user language and has no character limits on subjects or descriptions.
+- **LLM-powered extraction** — Calls the configured LLM to turn conversation turns into a structured progress tree. Only each turn's user question is sent to the LLM; assistant replies, reasoning, and tool output are not submitted. Output follows the dominant user language and keeps subjects and descriptions concise.
 - **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
 - **Large-session polling** — Enable with `PROGRESS_USE_POLLING=true`. Long sessions are processed in 5-turn chunks; each intermediate result is pushed to the UI immediately via WebSocket.
 - **Large-session fallback** — If the model returns empty or malformed JSON, the plugin truncates each turn and retries with only the last 5 turns.
@@ -48,7 +48,7 @@ Configuration is read in the following priority order:
 | `ANTHROPIC_API_KEY` | Yes | LLM API key. Also accepts `ANTHROPIC_AUTH_TOKEN` or `API_KEY`. |
 | `ANTHROPIC_BASE_URL` | No | Custom API base URL. Also accepts `BASE_URL`. |
 | `PROGRESS_MODEL` / `ANTHROPIC_MODEL` / `MODEL` | No | Extraction model. Defaults to `claude-3-5-sonnet-20241022`. |
-| `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to `4096`. |
+| `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to and is capped at `4096`. |
 | `TIMEOUT_MS` / `PROGRESS_TIMEOUT_MS` / `ANTHROPIC_TIMEOUT_MS` | No | LLM request timeout in milliseconds. Defaults to `60000`. |
 | `PROGRESS_USE_POLLING` | No | Enable polling extraction for large sessions. Defaults to `false`. |
 | `PROGRESS_TRACE_EXTRACTIONS` | No | Log full Codex conversation text, final prompts, and token usage as JSON lines. Defaults to `false`. |
@@ -167,7 +167,7 @@ Recommended for sessions larger than a few dozen turns or when the default mode 
 - **Large-session extraction fails**:
   - Default mode: the plugin automatically truncates turns and retries with the last 5 turns.
   - Enable polling: set `PROGRESS_USE_POLLING=true` to process 5-turn chunks sequentially.
-  - Increase `MAX_TOKENS` to give the model more room for the JSON response.
+  - Set `MAX_TOKENS` up to the `4096` cap to give the model more room for the JSON response.
 - **WebSocket not updating**:
   - Ensure the plugin server logged `{ "ready": true, "port": ... }` and the `subscribe` message contains the correct `sessionId`.
 

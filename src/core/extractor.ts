@@ -24,6 +24,8 @@ export interface LLMExtractionEngineOptions {
   trace?: (event: ExtractionTraceEvent) => void;
 }
 
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+
 const SYSTEM_PROMPT = `You are a session progress extractor. Your job is to analyze conversation turns and produce a two-level progress tree.
 
 Rules:
@@ -32,12 +34,12 @@ Rules:
 3. Do not merge multiple turns into a single step. If the same topic is discussed across multiple turns, create a separate step for each turn under the same goal.
 4. Keep existing goal/step IDs stable when they still match the conversation. Only add new goals/steps, update status, or mark nodes completed based on the turns.
 5. Mark a goal or step as completed only when the turn clearly indicates completion.
-6. Use one clear sentence for each subject and one clear sentence for each description. Do not enforce character limits; focus on clarity and usefulness.
-7. Infer progress only from the user's question and the model's final reply. Do not attempt to recover or infer internal reasoning, tool calls, or tool output; those fields are intentionally omitted from the input.
+6. Use one short, clear sentence for each subject and one short, clear sentence for each description. Do not restate the turn text.
+7. Infer progress only from the user's question in each turn. Assistant replies, internal reasoning, tool calls, and tool output are intentionally omitted from the input.
 8. Detect the dominant language used by the user across the turns and generate the progress tree in that same language. Prefer the user's language over the assistant's.
 9. Every goal and every step must include a non-empty string "id". Preserve IDs from the current tree where possible; when a node is new, create a stable unique ID from its subject and promptId.
 10. Every step must include the exact promptId of the conversation turn it represents.
-11. Output ONLY valid JSON matching the ProgressTree schema. Do not wrap it in markdown.`;
+11. Your response must start with the character "{". Output ONLY valid JSON matching the ProgressTree schema. Do not output reasoning, explanations, markdown fences, or any text before or after the JSON.`;
 
 function buildPrompt(tree: ProgressTree, turns: ConversationTurn[], strict = false): string {
   const base = `Current Progress Tree:
@@ -48,7 +50,7 @@ ${JSON.stringify(turns, null, 2)}`;
   if (strict) {
     return (
       base +
-      '\n\nIMPORTANT: Your previous output was invalid. This time output only raw JSON. No markdown, no explanation. Every goal and step must have a non-empty "id"; every step must also have the exact "promptId" from its conversation turn.'
+      '\n\nIMPORTANT: Your previous output was invalid. This time the response must start with "{" and contain only raw JSON. No markdown, no reasoning, no explanation, and no trailing text. Every goal and step must have a non-empty "id"; every step must also have the exact "promptId" from its conversation turn.'
     );
   }
   return base;
@@ -240,7 +242,6 @@ export function summarizeTurns(
     lineEnd: turn.lineEnd,
     timestamp: turn.timestamp,
     userText: truncateText(turn.userText, maxFieldLength),
-    assistantText: truncateText(turn.assistantText, maxFieldLength),
   }));
 }
 function truncateText(text: string | undefined, maxLength: number): string | undefined {
@@ -402,9 +403,13 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         prompt,
       });
     }
+    const maxTokens = Math.min(
+      this.config.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      DEFAULT_MAX_OUTPUT_TOKENS,
+    );
     const response = await this.client.messages.create({
       model: this.config.model,
-      max_tokens: this.config.maxTokens ?? 4096,
+      max_tokens: maxTokens,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     });
