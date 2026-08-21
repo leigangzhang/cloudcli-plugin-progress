@@ -233,7 +233,7 @@ function extractJsonObject(text: string): string {
 }
 export function summarizeTurns(
   turns: ConversationTurn[],
-  turnLimit = 20,
+  turnLimit = 5,
   maxFieldLength = 2000,
 ): ConversationTurn[] {
   return turns.slice(-turnLimit).map((turn) => ({
@@ -308,12 +308,10 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         metrics: measureConversationTurns(turns),
       });
     }
-    if (this.config.usePolling && turns.length > 5) {
-      return this.extractByPolling(tree, turns, onProgress, traceContext);
+    if (turns.length === 0) {
+      return this.extractWithRetry(tree, turns, traceContext);
     }
-    const result = await this.extractWithRetry(tree, turns, traceContext);
-    onProgress?.(result);
-    return result;
+    return this.extractByPolling(tree, turns, onProgress, traceContext);
   }
 
   private async extractWithRetry(
@@ -322,7 +320,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
     traceContext?: ExtractionTraceContext,
   ): Promise<ProgressTree> {
     try {
-      return await this.doExtract(tree, summarizeTurns(turns, 20), false, traceContext, 1);
+      return await this.doExtract(tree, summarizeTurns(turns, 5), false, traceContext, 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (
@@ -335,7 +333,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
       }
       // Retry once with a stricter prompt before giving up.
-      return await this.doExtract(tree, summarizeTurns(turns, 20), true, traceContext, 2);
+      return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
     }
   }
   private async extractByPolling(
