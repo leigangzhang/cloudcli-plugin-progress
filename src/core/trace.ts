@@ -58,6 +58,8 @@ export type ExtractionTraceEvent =
       context: ExtractionTraceContext;
       attempt: number;
       usage: ExtractionUsageTrace;
+      error?: string;
+      prompt?: string;
     };
 
 export function estimateTokens(text: string | undefined): number {

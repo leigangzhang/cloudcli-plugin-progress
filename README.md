@@ -150,8 +150,7 @@ Extraction now always works in 5-turn chunks:
 2. Remaining turns are split into 5-turn chunks.
 3. Each chunk is extracted sequentially, using the result of the previous chunk as the current tree.
 4. After every chunk the intermediate tree is saved to the store and broadcast to the UI via WebSocket, so you see progress appear gradually instead of waiting for the whole session.
-5. If the model returns empty or malformed JSON, the chunk retries with a stricter prompt.
-6. If the accumulated tree makes a later chunk fail, that chunk is retried with an empty tree as a last resort.
+5. Each chunk sends one LLM request. Invalid JSON or API failures are reported to the UI and trace log rather than automatically retried.
 
 Manual `/refresh` still processes the complete session log in 5-turn chunks.
 
@@ -164,8 +163,7 @@ Manual `/refresh` still processes the complete session log in 5-turn chunks.
 - **Sync errors**:
   - The UI displays the error message. Use `/debug` for details; API keys are redacted in logs.
 - **Large-session extraction fails**:
-  - Default mode: the plugin automatically truncates turns and retries with the last 5 turns.
-  - Enable polling: set `PROGRESS_USE_POLLING=true` to process 5-turn chunks sequentially.
+  - Extraction now processes pending turns in 5-turn chunks and does not retry automatically.
   - Set `MAX_TOKENS` up to the `4096` cap to give the model more room for the JSON response.
 - **WebSocket not updating**:
   - Ensure the plugin server logged `{ "ready": true, "port": ... }` and the `subscribe` message contains the correct `sessionId`.
