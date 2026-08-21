@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LLMExtractionEngineImpl, summarizeTurns } from '../../src/core/extractor.js';
 import type { Anthropic } from '../../src/core/extractor.js';
 import type { ConversationTurn, LLMConfig, ProgressTree } from '../../src/core/types.js';
+import type { ExtractionTraceContext, ExtractionTraceEvent } from '../../src/core/trace.js';
 
 function mockConfig(): LLMConfig {
   return {
@@ -117,6 +118,70 @@ describe('LLMExtractionEngineImpl', () => {
     await engine.extract(tree, []);
     expect(usages.length).toBe(1);
     expect(usages[0]).toEqual({ inputTokens: 123, outputTokens: 45 });
+  });
+
+  it('emits Codex conversation, prompt, and usage trace events', async () => {
+    const tree: ProgressTree = { version: 1, goals: [] };
+    const client = mockClient({
+      text: JSON.stringify({ version: 2, goals: [] }),
+      inputTokens: 321,
+      outputTokens: 123,
+    });
+    const trace = vi.fn<(event: ExtractionTraceEvent) => void>();
+    const engine = new LLMExtractionEngineImpl({
+      config: mockConfig(),
+      client,
+      trace,
+    });
+    const turns: ConversationTurn[] = [
+      {
+        promptId: 'codex-turn',
+        lineStart: 1,
+        lineEnd: 4,
+        userText: 'codex question',
+        thinkingText: 'private codex reasoning',
+        assistantText: 'codex reply',
+        toolText: 'private tool output',
+        timestamp: '2026-08-21T00:00:00Z',
+      },
+    ];
+    const context: ExtractionTraceContext = {
+      requestId: 'trace-request',
+      sessionId: 'codex-thread',
+      cloudcliSessionId: 'cloudcli-session',
+      provider: 'codex',
+      logPath: '/tmp/rollout.jsonl',
+      mode: 'incremental',
+      parseScope: 'full_file',
+    };
+
+    await engine.extract(tree, turns, undefined, context);
+
+    const events = trace.mock.calls.map(([event]) => event);
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'prompt',
+      'usage',
+    ]);
+
+    const conversation = events[0] as Extract<ExtractionTraceEvent, { type: 'conversation' }>;
+    expect(conversation.context.mode).toBe('incremental');
+    expect(conversation.context.parseScope).toBe('full_file');
+    expect(conversation.turns[0].thinkingText).toBe('private codex reasoning');
+    expect(conversation.metrics.thinkingCharacters).toBeGreaterThan(0);
+
+    const prompt = events[1] as Extract<ExtractionTraceEvent, { type: 'prompt' }>;
+    expect(prompt.prompt).toContain('codex question');
+    expect(prompt.prompt).toContain('codex reply');
+    expect(prompt.prompt).not.toContain('private codex reasoning');
+    expect(prompt.prompt).not.toContain('private tool output');
+    expect(prompt.estimatedPromptTokens).toBeGreaterThan(0);
+
+    const usage = events[2] as Extract<ExtractionTraceEvent, { type: 'usage' }>;
+    expect(usage.usage).toMatchObject({
+      inputTokens: 321,
+      outputTokens: 123,
+    });
   });
 
   it('validates schema and throws for invalid tree', async () => {

@@ -12,6 +12,7 @@ import { resolveSessionLogPath } from './core/paths.js';
 import { ProgressStoreImpl } from './core/store.js';
 import { buildTurnsFromLog } from './core/turns.js';
 import { FileLogWatcher } from './core/watcher.js';
+import { createTraceRequestId, extractionTraceEnabled, writeExtractionTrace, } from './core/trace.js';
 function readBody(req) {
     return new Promise((resolve, reject) => {
         let data = '';
@@ -39,7 +40,12 @@ export class ProgressServer {
     async start() {
         this.extractor =
             this.options.extractor ??
-                (this.config.apiKey ? new LLMExtractionEngineImpl({ config: this.config }) : undefined);
+                (this.config.apiKey
+                    ? new LLMExtractionEngineImpl({
+                        config: this.config,
+                        trace: (event) => this.traceExtraction(event),
+                    })
+                    : undefined);
         return new Promise((resolve, reject) => {
             this.httpServer = http.createServer((req, res) => void this.handleHttp(req, res));
             this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
@@ -76,7 +82,10 @@ export class ProgressServer {
     createSessionExtractor(session) {
         try {
             const sessionConfig = loadConfig({ projectPath: session.projectPath });
-            session.extractor = new LLMExtractionEngineImpl({ config: sessionConfig });
+            session.extractor = new LLMExtractionEngineImpl({
+                config: sessionConfig,
+                trace: (event) => this.traceExtraction(event),
+            });
         }
         catch {
             // Project .env is either missing or incomplete. Fall back to the server-level
@@ -92,7 +101,7 @@ export class ProgressServer {
             this.setStatus(session.sessionId, 'syncing');
             try {
                 const turns = this.getSessionTurns(session);
-                const updated = await extractor.extract(session.store.getState(), turns);
+                const updated = await extractor.extract(session.store.getState(), turns, undefined, this.buildTraceContext(session, 'incremental'));
                 session.store.setState(updated);
                 this.setStatus(session.sessionId, 'idle');
             }
@@ -127,6 +136,31 @@ export class ProgressServer {
             ? buildTurnsFromLog(logPath)
             : session.buffer.getTurns();
     }
+    buildTraceContext(session, mode) {
+        return {
+            requestId: createTraceRequestId(),
+            sessionId: session.sessionId,
+            cloudcliSessionId: session.cloudcliSessionId,
+            projectPath: session.projectPath,
+            provider: session.provider,
+            logPath: session.watcher.getFilePath(),
+            mode,
+            parseScope: session.provider === 'codex' ? 'full_file' : 'buffer',
+        };
+    }
+    traceExtraction(event) {
+        if (event.context.provider !== 'codex')
+            return;
+        if (this.options.traceExtractions === false)
+            return;
+        if (this.options.traceExtractions !== true && !extractionTraceEnabled())
+            return;
+        writeExtractionTrace({
+            source: 'progress-plugin',
+            timestamp: new Date().toISOString(),
+            ...event,
+        });
+    }
     async getOrCreateSession(cloudcliSessionId, projectPath) {
         const resolved = await resolveSessionLogPath(projectPath, cloudcliSessionId, this.options.projectsDir);
         const realSessionId = resolved.realSessionId;
@@ -156,8 +190,8 @@ export class ProgressServer {
                 });
                 await session.watcher.startWithPath(resolved.logPath);
                 const logPath = session.watcher.getFilePath();
-                if (logPath && !fs.existsSync(logPath)) {
-                    this.setStatus(realSessionId, 'error', `Session log not found: ${logPath}`);
+                if (!logPath || !fs.existsSync(logPath)) {
+                    this.setStatus(realSessionId, 'error', `Session log not found: ${logPath || realSessionId}`);
                 }
             }
             return session;
@@ -202,8 +236,8 @@ export class ProgressServer {
         }
         await watcher.startWithPath(resolved.logPath);
         const logPath = watcher.getFilePath();
-        if (logPath && !fs.existsSync(logPath)) {
-            this.setStatus(realSessionId, 'error', `Session log not found: ${logPath}`);
+        if (!logPath || !fs.existsSync(logPath)) {
+            this.setStatus(realSessionId, 'error', `Session log not found: ${logPath || realSessionId}`);
         }
         else {
             this.setStatus(realSessionId, 'idle');
@@ -326,7 +360,7 @@ export class ProgressServer {
             const turns = this.getSessionTurns(session);
             const updated = await extractor.extract(session.store.getState(), turns, (progressTree) => {
                 session.store.setState(progressTree);
-            });
+            }, this.buildTraceContext(session, 'full'));
             session.store.setState(updated);
             this.setStatus(sessionId, 'idle');
             try {

@@ -51,6 +51,9 @@ Configuration is read in the following priority order:
 | `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to `4096`. |
 | `TIMEOUT_MS` / `PROGRESS_TIMEOUT_MS` / `ANTHROPIC_TIMEOUT_MS` | No | LLM request timeout in milliseconds. Defaults to `60000`. |
 | `PROGRESS_USE_POLLING` | No | Enable polling extraction for large sessions. Defaults to `false`. |
+| `PROGRESS_TRACE_EXTRACTIONS` | No | Log full Codex conversation text, final prompts, and token usage as JSON lines. Defaults to `false`. |
+| `PROGRESS_TRACE_LOG_DIR` | No | Trace log directory. Defaults to `~/.claude-code-ui/plugins/cloudcli-plugin-progress`. |
+| `PROGRESS_TRACE_LOG_FILE` | No | Trace log filename. Defaults to `progress-plugin.log`. |
 
 ### Example plugin `.env`
 
@@ -173,6 +176,22 @@ Recommended for sessions larger than a few dozen turns or when the default mode 
 CloudCLI stores provider metadata in `~/.cloudcli/auth.db`. When the current session has `provider = "codex"`, the plugin follows its `jsonl_path` to the local Codex rollout under `~/.codex/sessions`. `/debug` reports the detected provider and log path.
 
 If Codex history persistence is disabled or the rollout was archived without updating the CloudCLI mapping, the plugin falls back to the Codex state database and archived session directory.
+
+### Codex extraction tracing
+
+Set `PROGRESS_TRACE_EXTRACTIONS=1` to write one JSON object per event to:
+
+```text
+~/.claude-code-ui/plugins/cloudcli-plugin-progress/progress-plugin.log
+```
+
+The log directory is created automatically. Each extraction emits:
+
+- `conversation`: the normalized Codex turns before LLM filtering, including `thinkingText` and `toolText`.
+- `prompt`: the exact prompt sent for each LLM attempt or polling chunk.
+- `usage`: actual `inputTokens`, `outputTokens`, and cache token fields returned by the API.
+
+The `context.mode` field distinguishes automatic triggers (`incremental`) from manual `/refresh` requests (`full`). Codex currently always reports `parseScope: "full_file"` because `buildCodexTurnsFromLog` rereads the complete rollout for every extraction. Prompts contain conversation text, so enable this only while debugging and monitor the log file size.
 
 ## License
 

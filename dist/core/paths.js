@@ -18,8 +18,37 @@ export function resolveLogPath(projectPath, sessionId, projectsDir = path.join(o
     const encoded = encodeProjectPath(projectPath);
     return path.join(projectsDir, encoded, `${sessionId}.jsonl`);
 }
+function normalizeOptions(options = {}) {
+    if (typeof options === 'string') {
+        return normalizeOptions({ projectsDir: options });
+    }
+    const home = os.homedir();
+    return {
+        projectsDir: options.projectsDir ?? path.join(home, '.claude', 'projects'),
+        cloudcliDbPath: options.cloudcliDbPath ??
+            process.env.DATABASE_PATH ??
+            path.join(home, '.cloudcli', 'auth.db'),
+        codexHome: options.codexHome ?? path.join(home, '.codex'),
+        claudeSessionsDir: options.claudeSessionsDir ?? path.join(home, '.claude', 'sessions'),
+    };
+}
 function projectDir(projectPath, projectsDir) {
     return path.join(projectsDir, encodeProjectPath(projectPath));
+}
+function existingLogPath(logPath) {
+    return logPath && fs.existsSync(logPath) ? logPath : undefined;
+}
+function findFiles(dir) {
+    try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        return entries.flatMap((entry) => {
+            const fullPath = path.join(dir, entry.name);
+            return entry.isDirectory() ? findFiles(fullPath) : [fullPath];
+        });
+    }
+    catch {
+        return [];
+    }
 }
 function findLatestJsonl(projectPath, projectsDir) {
     const dir = projectDir(projectPath, projectsDir);
@@ -49,11 +78,11 @@ function readSessionMetadata(filePath) {
         }
     }
     catch {
-        // ignore malformed files
+        // Ignore malformed metadata files.
     }
     return undefined;
 }
-function findActiveSessionForProject(projectPath, sessionsDir = path.join(os.homedir(), '.claude', 'sessions')) {
+function findActiveSessionForProject(projectPath, sessionsDir) {
     try {
         const entries = fs.readdirSync(sessionsDir);
         const matches = [];
@@ -81,19 +110,19 @@ function findActiveSessionForProject(projectPath, sessionsDir = path.join(os.hom
         return undefined;
     }
 }
-async function resolveFromCloudCliDatabase(cloudcliSessionId, dbPath = process.env.DATABASE_PATH ?? path.join(os.homedir(), '.cloudcli', 'auth.db')) {
+async function resolveFromCloudCliDatabase(cloudcliSessionId, dbPath) {
     try {
         const DatabaseSync = databaseSync();
         const db = new DatabaseSync(dbPath, { readOnly: true });
         try {
             const stmt = db.prepare('SELECT provider, provider_session_id, jsonl_path FROM sessions WHERE session_id = ? LIMIT 1');
             const row = stmt.get(cloudcliSessionId);
-            if (!row)
+            if (!row?.provider_session_id)
                 return undefined;
             return {
-                provider: row.provider ?? undefined,
-                provider_session_id: row.provider_session_id ?? undefined,
-                jsonl_path: row.jsonl_path ?? undefined,
+                provider: row.provider === 'codex' ? 'codex' : 'claude',
+                providerSessionId: row.provider_session_id,
+                jsonlPath: row.jsonl_path ?? undefined,
             };
         }
         finally {
@@ -104,19 +133,7 @@ async function resolveFromCloudCliDatabase(cloudcliSessionId, dbPath = process.e
         return undefined;
     }
 }
-function findFiles(dir) {
-    try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        return entries.flatMap((entry) => {
-            const fullPath = path.join(dir, entry.name);
-            return entry.isDirectory() ? findFiles(fullPath) : [fullPath];
-        });
-    }
-    catch {
-        return [];
-    }
-}
-function findCodexRollout(sessionId, codexHome = path.join(os.homedir(), '.codex')) {
+function findCodexRollout(sessionId, codexHome) {
     for (const dir of [
         path.join(codexHome, 'sessions'),
         path.join(codexHome, 'archived_sessions'),
@@ -127,7 +144,7 @@ function findCodexRollout(sessionId, codexHome = path.join(os.homedir(), '.codex
     }
     return undefined;
 }
-async function resolveCodexFromStateDb(sessionId, codexHome = path.join(os.homedir(), '.codex')) {
+async function resolveCodexFromStateDb(sessionId, codexHome) {
     try {
         const DatabaseSync = databaseSync();
         const db = new DatabaseSync(path.join(codexHome, 'state_5.sqlite'), { readOnly: true });
@@ -135,8 +152,7 @@ async function resolveCodexFromStateDb(sessionId, codexHome = path.join(os.homed
             const row = db
                 .prepare('SELECT rollout_path FROM threads WHERE id = ? LIMIT 1')
                 .get(sessionId);
-            const rolloutPath = row?.rollout_path;
-            return rolloutPath && fs.existsSync(rolloutPath) ? rolloutPath : undefined;
+            return existingLogPath(row?.rollout_path ?? undefined);
         }
         finally {
             db.close();
@@ -146,45 +162,42 @@ async function resolveCodexFromStateDb(sessionId, codexHome = path.join(os.homed
         return undefined;
     }
 }
-async function resolveCodexSessionLogPath(sessionId) {
-    const logPath = (await resolveCodexFromStateDb(sessionId)) ?? findCodexRollout(sessionId);
+export async function resolveCodexSessionLogPath(sessionId, options = {}) {
+    const codexHome = options.codexHome ?? path.join(os.homedir(), '.codex');
+    const logPath = existingLogPath(options.knownLogPath) ??
+        (await resolveCodexFromStateDb(sessionId, codexHome)) ??
+        findCodexRollout(sessionId, codexHome);
     if (!logPath)
         return undefined;
     return { logPath, realSessionId: sessionId, provider: 'codex' };
 }
-export async function resolveSessionLogPath(projectPath, cloudcliSessionId, projectsDir = path.join(os.homedir(), '.claude', 'projects')) {
-    const exactPath = resolveLogPath(projectPath, cloudcliSessionId, projectsDir);
-    if (fs.existsSync(exactPath)) {
-        return { logPath: exactPath, realSessionId: cloudcliSessionId, provider: 'claude' };
+function resolveExactClaudeLogPath(projectPath, sessionId, projectsDir) {
+    const exactPath = existingLogPath(resolveLogPath(projectPath, sessionId, projectsDir));
+    if (!exactPath)
+        return undefined;
+    return { logPath: exactPath, realSessionId: sessionId, provider: 'claude' };
+}
+export function resolveClaudeSessionLogPath(projectPath, sessionId, options = {}) {
+    const projectsDir = options.projectsDir ?? path.join(os.homedir(), '.claude', 'projects');
+    const sessionsDir = options.sessionsDir ?? path.join(os.homedir(), '.claude', 'sessions');
+    const knownPath = existingLogPath(options.knownLogPath);
+    if (knownPath) {
+        return { logPath: knownPath, realSessionId: sessionId, provider: 'claude' };
     }
-    // CloudCLI maintains a SQLite mapping from app-facing session_id to
-    // provider-native session_id and jsonl_path. Use it when available.
-    const dbRow = await resolveFromCloudCliDatabase(cloudcliSessionId);
-    if (dbRow?.provider_session_id) {
-        const realSessionId = dbRow.provider_session_id;
-        const provider = dbRow.provider === 'codex' ? 'codex' : 'claude';
-        const logPath = dbRow.jsonl_path && fs.existsSync(dbRow.jsonl_path)
-            ? dbRow.jsonl_path
-            : provider === 'codex'
-                ? (await resolveCodexSessionLogPath(realSessionId))?.logPath
-                : resolveLogPath(projectPath, realSessionId, projectsDir);
-        if (logPath && fs.existsSync(logPath)) {
-            return { logPath, realSessionId, provider };
-        }
-    }
-    const codexResolved = await resolveCodexSessionLogPath(cloudcliSessionId);
-    if (codexResolved)
-        return codexResolved;
-    // Fallback: scan Claude Code CLI PID metadata to find an active session for
-    // the same project.
-    const activeSessionId = findActiveSessionForProject(projectPath);
+    const exact = resolveExactClaudeLogPath(projectPath, sessionId, projectsDir);
+    if (exact)
+        return exact;
+    const activeSessionId = findActiveSessionForProject(projectPath, sessionsDir);
     if (activeSessionId) {
-        const activePath = resolveLogPath(projectPath, activeSessionId, projectsDir);
-        if (fs.existsSync(activePath)) {
-            return { logPath: activePath, realSessionId: activeSessionId, provider: 'claude' };
+        const activePath = existingLogPath(resolveLogPath(projectPath, activeSessionId, projectsDir));
+        if (activePath) {
+            return {
+                logPath: activePath,
+                realSessionId: activeSessionId,
+                provider: 'claude',
+            };
         }
     }
-    // Last resort: use the most recently modified jsonl in the project dir.
     const latestPath = findLatestJsonl(projectPath, projectsDir);
     if (latestPath) {
         return {
@@ -193,6 +206,51 @@ export async function resolveSessionLogPath(projectPath, cloudcliSessionId, proj
             provider: 'claude',
         };
     }
-    return { logPath: exactPath, realSessionId: cloudcliSessionId, provider: 'claude' };
+    return undefined;
+}
+export async function resolveSessionLogPath(projectPath, cloudcliSessionId, options = {}) {
+    const opts = normalizeOptions(options);
+    const mapping = await resolveFromCloudCliDatabase(cloudcliSessionId, opts.cloudcliDbPath);
+    if (mapping) {
+        if (mapping.provider === 'codex') {
+            const resolved = await resolveCodexSessionLogPath(mapping.providerSessionId, {
+                codexHome: opts.codexHome,
+                knownLogPath: mapping.jsonlPath,
+            });
+            return (resolved ?? {
+                logPath: mapping.jsonlPath ?? '',
+                realSessionId: mapping.providerSessionId,
+                provider: 'codex',
+            });
+        }
+        const resolved = resolveClaudeSessionLogPath(projectPath, mapping.providerSessionId, {
+            projectsDir: opts.projectsDir,
+            sessionsDir: opts.claudeSessionsDir,
+            knownLogPath: mapping.jsonlPath,
+        });
+        return (resolved ?? {
+            logPath: mapping.jsonlPath ??
+                resolveLogPath(projectPath, mapping.providerSessionId, opts.projectsDir),
+            realSessionId: mapping.providerSessionId,
+            provider: 'claude',
+        });
+    }
+    const exactClaude = resolveExactClaudeLogPath(projectPath, cloudcliSessionId, opts.projectsDir);
+    if (exactClaude)
+        return exactClaude;
+    // Preserve direct Codex IDs for callers that bypass the CloudCLI mapping.
+    const directCodex = await resolveCodexSessionLogPath(cloudcliSessionId, {
+        codexHome: opts.codexHome,
+    });
+    if (directCodex)
+        return directCodex;
+    return (resolveClaudeSessionLogPath(projectPath, cloudcliSessionId, {
+        projectsDir: opts.projectsDir,
+        sessionsDir: opts.claudeSessionsDir,
+    }) ?? {
+        logPath: resolveLogPath(projectPath, cloudcliSessionId, opts.projectsDir),
+        realSessionId: cloudcliSessionId,
+        provider: 'claude',
+    });
 }
 //# sourceMappingURL=paths.js.map
