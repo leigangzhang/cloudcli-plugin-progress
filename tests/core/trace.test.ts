@@ -3,11 +3,26 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   getExtractionTraceLogPath,
+  resolveExtractionTraceEnabled,
   writeExtractionTrace,
 } from '../../src/core/trace.js';
 import { createTempDir } from '../utils.js';
 
 describe('extraction trace file logging', () => {
+  it('prefers the parsed config value over process environment', () => {
+    expect(resolveExtractionTraceEnabled(true, {})).toBe(true);
+    expect(
+      resolveExtractionTraceEnabled(false, {
+        PROGRESS_TRACE_EXTRACTIONS: '1',
+      }),
+    ).toBe(false);
+    expect(
+      resolveExtractionTraceEnabled(undefined, {
+        PROGRESS_TRACE_EXTRACTIONS: '1',
+      }),
+    ).toBe(true);
+  });
+
   it('uses the CloudCLI progress plugin directory by default', () => {
     expect(getExtractionTraceLogPath({}, '/home/ray')).toBe(
       path.join(

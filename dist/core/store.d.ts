@@ -2,6 +2,7 @@ import type { ProgressStore, ProgressTree } from './types.js';
 export interface ProgressStoreOptions {
     snapshotDir?: string;
 }
+export declare function defaultSnapshotDir(home?: string): string;
 export declare class ProgressStoreImpl implements ProgressStore {
     private state;
     private listeners;

@@ -8,13 +8,17 @@ export interface ProgressStoreOptions {
   snapshotDir?: string;
 }
 
-const DEFAULT_SNAPSHOT_DIR = path.join(
-  os.homedir(),
-  '.claude-code-ui',
-  'plugins',
-  'progress-plugin',
-  '.snapshots',
-);
+export function defaultSnapshotDir(home = os.homedir()): string {
+  return path.join(
+    home,
+    '.claude-code-ui',
+    'plugins',
+    'cloudcli-plugin-progress',
+    '.snapshots',
+  );
+}
+
+const DEFAULT_SNAPSHOT_DIR = defaultSnapshotDir();
 
 function snapshotPath(snapshotDir: string, sessionId: string): string {
   return path.join(snapshotDir, `${sessionId}.json`);

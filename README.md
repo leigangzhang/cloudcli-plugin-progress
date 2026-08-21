@@ -12,7 +12,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 - **Local conversation records** — Step details are read from the local `.jsonl` file and rendered as Markdown. No raw conversation text is returned by the LLM.
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
 - **LLM-powered extraction** — Calls the configured LLM to turn conversation turns into a structured progress tree. Output follows the dominant user language and has no character limits on subjects or descriptions.
-- **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/progress-plugin/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
+- **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
 - **Large-session polling** — Enable with `PROGRESS_USE_POLLING=true`. Long sessions are processed in 5-turn chunks; each intermediate result is pushed to the UI immediately via WebSocket.
 - **Large-session fallback** — If the model returns empty or malformed JSON, the plugin truncates each turn and retries with only the last 5 turns.
 - **Codex rollout parsing** — Codex turns are grouped by `turn_id`, including user messages, summarized reasoning, assistant output, and tool calls. V1 tracks the mapped root thread; spawned subagent rollouts are not merged automatically.
@@ -192,6 +192,8 @@ The log directory is created automatically. Each extraction emits:
 - `usage`: actual `inputTokens`, `outputTokens`, and cache token fields returned by the API.
 
 The `context.mode` field distinguishes automatic triggers (`incremental`) from manual `/refresh` requests (`full`). Codex currently always reports `parseScope: "full_file"` because `buildCodexTurnsFromLog` rereads the complete rollout for every extraction. Prompts contain conversation text, so enable this only while debugging and monitor the log file size.
+
+Trace settings are read from the plugin `.env` through the normal configuration chain, with the process environment as a fallback. CloudCLI does not need to inject these variables into the backend process.
 
 ## License
 

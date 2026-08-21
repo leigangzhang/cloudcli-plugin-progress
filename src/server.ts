@@ -14,7 +14,7 @@ import { buildTurnsFromLog } from './core/turns.js';
 import { FileLogWatcher } from './core/watcher.js';
 import {
   createTraceRequestId,
-  extractionTraceEnabled,
+  resolveExtractionTraceEnabled,
   type ExtractionTraceContext,
   type ExtractionTraceEvent,
   writeExtractionTrace,
@@ -212,12 +212,22 @@ export class ProgressServer {
   private traceExtraction(event: ExtractionTraceEvent): void {
     if (event.context.provider !== 'codex') return;
     if (this.options.traceExtractions === false) return;
-    if (this.options.traceExtractions !== true && !extractionTraceEnabled()) return;
+    const configuredTrace =
+      this.options.traceExtractions === true ? true : this.config.traceExtractions;
+    if (!resolveExtractionTraceEnabled(configuredTrace)) return;
+
+    const traceEnv = { ...process.env };
+    if (this.config.traceLogDir) {
+      traceEnv.PROGRESS_TRACE_LOG_DIR = this.config.traceLogDir;
+    }
+    if (this.config.traceLogFile) {
+      traceEnv.PROGRESS_TRACE_LOG_FILE = this.config.traceLogFile;
+    }
     writeExtractionTrace({
       source: 'progress-plugin',
       timestamp: new Date().toISOString(),
       ...event,
-    });
+    }, traceEnv);
   }
 
   private async getOrCreateSession(
