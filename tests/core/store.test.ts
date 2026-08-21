@@ -1,11 +1,23 @@
  import { describe, expect, it } from 'vitest';
  import fs from 'node:fs';
  import path from 'node:path';
- import { ProgressStoreImpl } from '../../src/core/store.js';
+ import { defaultSnapshotDir, ProgressStoreImpl } from '../../src/core/store.js';
  import type { ProgressTree } from '../../src/core/types.js';
  import { createTempDir } from '../utils.js';
 
  describe('ProgressStoreImpl', () => {
+   it('uses the CloudCLI plugin snapshot directory by default', () => {
+     expect(defaultSnapshotDir('/home/ray')).toBe(
+       path.join(
+         '/home/ray',
+         '.claude-code-ui',
+         'plugins',
+         'cloudcli-plugin-progress',
+         '.snapshots',
+       ),
+     );
+   });
+
    it('returns the current state', () => {
      const store = new ProgressStoreImpl();
      expect(store.getState()).toEqual({ version: 0, goals: [] });

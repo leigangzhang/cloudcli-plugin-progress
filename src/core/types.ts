@@ -149,6 +149,9 @@ export interface LLMConfig {
   requestTimeoutMs?: number;
   maxTokens?: number;
   usePolling?: boolean;
+  traceExtractions?: boolean;
+  traceLogDir?: string;
+  traceLogFile?: string;
 }
 
 export interface SessionLogWatcher {

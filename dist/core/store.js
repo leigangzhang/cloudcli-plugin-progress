@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { validateProgressTree } from './schema.js';
-const DEFAULT_SNAPSHOT_DIR = path.join(os.homedir(), '.claude-code-ui', 'plugins', 'progress-plugin', '.snapshots');
+export function defaultSnapshotDir(home = os.homedir()) {
+    return path.join(home, '.claude-code-ui', 'plugins', 'cloudcli-plugin-progress', '.snapshots');
+}
+const DEFAULT_SNAPSHOT_DIR = defaultSnapshotDir();
 function snapshotPath(snapshotDir, sessionId) {
     return path.join(snapshotDir, `${sessionId}.json`);
 }

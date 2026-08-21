@@ -52,6 +52,7 @@ export declare function estimateTokens(text: string | undefined): number;
 export declare function measureConversationTurns(turns: ConversationTurn[]): ConversationTraceMetrics;
 export declare function createTraceRequestId(): string;
 export declare function extractionTraceEnabled(env?: NodeJS.ProcessEnv): boolean;
+export declare function resolveExtractionTraceEnabled(configuredTrace: boolean | undefined, env?: NodeJS.ProcessEnv): boolean;
 export declare function getExtractionTraceLogPath(env?: NodeJS.ProcessEnv, home?: string): string;
 export declare function writeExtractionTrace(value: unknown, env?: NodeJS.ProcessEnv, home?: string): void;
 //# sourceMappingURL=trace.d.ts.map

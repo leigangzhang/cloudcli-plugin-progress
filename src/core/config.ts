@@ -63,6 +63,9 @@ function readSettingsEnv(settingsPath: string): Partial<LLMConfig> {
       apiKey: env.ANTHROPIC_API_KEY ?? env.ANTHROPIC_AUTH_TOKEN,
       baseUrl: env.ANTHROPIC_BASE_URL,
       model: env.PROGRESS_MODEL ?? env.ANTHROPIC_MODEL,
+      traceExtractions: parseBoolToken(env.PROGRESS_TRACE_EXTRACTIONS),
+      traceLogDir: env.PROGRESS_TRACE_LOG_DIR,
+      traceLogFile: env.PROGRESS_TRACE_LOG_FILE,
     };
   } catch {
     return {};
@@ -97,6 +100,9 @@ function readEnvFile(basePath: string): Partial<LLMConfig> {
       maxTokens: parseIntToken(vars.MAX_TOKENS ?? vars.PROGRESS_MAX_TOKENS ?? vars.ANTHROPIC_MAX_TOKENS),
       requestTimeoutMs: parseIntToken(vars.TIMEOUT_MS ?? vars.PROGRESS_TIMEOUT_MS ?? vars.ANTHROPIC_TIMEOUT_MS),
       usePolling: parseBoolToken(vars.PROGRESS_USE_POLLING),
+      traceExtractions: parseBoolToken(vars.PROGRESS_TRACE_EXTRACTIONS),
+      traceLogDir: vars.PROGRESS_TRACE_LOG_DIR,
+      traceLogFile: vars.PROGRESS_TRACE_LOG_FILE,
     };
   } catch {
     return {};
@@ -161,6 +167,21 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
       projectEnv.usePolling ??
       pluginEnv.usePolling ??
       parseBoolToken(env.PROGRESS_USE_POLLING),
+    traceExtractions:
+      projectEnv.traceExtractions ??
+      pluginEnv.traceExtractions ??
+      settings.traceExtractions ??
+      parseBoolToken(env.PROGRESS_TRACE_EXTRACTIONS),
+    traceLogDir:
+      projectEnv.traceLogDir ??
+      pluginEnv.traceLogDir ??
+      settings.traceLogDir ??
+      env.PROGRESS_TRACE_LOG_DIR,
+    traceLogFile:
+      projectEnv.traceLogFile ??
+      pluginEnv.traceLogFile ??
+      settings.traceLogFile ??
+      env.PROGRESS_TRACE_LOG_FILE,
   };
 }
 

@@ -101,6 +101,14 @@ export function extractionTraceEnabled(
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+export function resolveExtractionTraceEnabled(
+  configuredTrace: boolean | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (configuredTrace !== undefined) return configuredTrace;
+  return extractionTraceEnabled(env);
+}
+
 export function getExtractionTraceLogPath(
   env: NodeJS.ProcessEnv = process.env,
   home = os.homedir(),

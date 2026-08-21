@@ -294,6 +294,40 @@ describe('loadConfig', () => {
     expect(config.usePolling).toBe(true);
     tmp.cleanup();
   });
+  it('reads extraction trace settings from plugin .env', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      [
+        'ANTHROPIC_API_KEY=plugin-token',
+        'PROGRESS_TRACE_EXTRACTIONS=1',
+        'PROGRESS_TRACE_LOG_DIR=/tmp/plugin-trace',
+        'PROGRESS_TRACE_LOG_FILE=codex.log',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const config = loadConfig({ pluginRoot });
+    expect(config.traceExtractions).toBe(true);
+    expect(config.traceLogDir).toBe('/tmp/plugin-trace');
+    expect(config.traceLogFile).toBe('codex.log');
+    tmp.cleanup();
+  });
+  it('falls back to extraction trace environment variables', () => {
+    const config = loadConfig({
+      settingsPath: '/nonexistent/settings.json',
+      env: {
+        ANTHROPIC_API_KEY: 'env-token',
+        PROGRESS_TRACE_EXTRACTIONS: 'true',
+        PROGRESS_TRACE_LOG_DIR: '/tmp/env-trace',
+        PROGRESS_TRACE_LOG_FILE: 'env.log',
+      },
+    });
+    expect(config.traceExtractions).toBe(true);
+    expect(config.traceLogDir).toBe('/tmp/env-trace');
+    expect(config.traceLogFile).toBe('env.log');
+  });
   it('falls back to PROGRESS_/ANTHROPIC_ variants for max tokens and timeout', () => {
     const tmp = createTempDir();
     const pluginRoot = tmp.path;

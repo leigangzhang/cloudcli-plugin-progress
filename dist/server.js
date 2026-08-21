@@ -12,7 +12,7 @@ import { resolveSessionLogPath } from './core/paths.js';
 import { ProgressStoreImpl } from './core/store.js';
 import { buildTurnsFromLog } from './core/turns.js';
 import { FileLogWatcher } from './core/watcher.js';
-import { createTraceRequestId, extractionTraceEnabled, writeExtractionTrace, } from './core/trace.js';
+import { createTraceRequestId, resolveExtractionTraceEnabled, writeExtractionTrace, } from './core/trace.js';
 function readBody(req) {
     return new Promise((resolve, reject) => {
         let data = '';
@@ -153,13 +153,21 @@ export class ProgressServer {
             return;
         if (this.options.traceExtractions === false)
             return;
-        if (this.options.traceExtractions !== true && !extractionTraceEnabled())
+        const configuredTrace = this.options.traceExtractions === true ? true : this.config.traceExtractions;
+        if (!resolveExtractionTraceEnabled(configuredTrace))
             return;
+        const traceEnv = { ...process.env };
+        if (this.config.traceLogDir) {
+            traceEnv.PROGRESS_TRACE_LOG_DIR = this.config.traceLogDir;
+        }
+        if (this.config.traceLogFile) {
+            traceEnv.PROGRESS_TRACE_LOG_FILE = this.config.traceLogFile;
+        }
         writeExtractionTrace({
             source: 'progress-plugin',
             timestamp: new Date().toISOString(),
             ...event,
-        });
+        }, traceEnv);
     }
     async getOrCreateSession(cloudcliSessionId, projectPath) {
         const resolved = await resolveSessionLogPath(projectPath, cloudcliSessionId, this.options.projectsDir);

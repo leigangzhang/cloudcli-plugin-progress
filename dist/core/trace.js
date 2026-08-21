@@ -34,6 +34,11 @@ export function extractionTraceEnabled(env = process.env) {
         return false;
     return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
+export function resolveExtractionTraceEnabled(configuredTrace, env = process.env) {
+    if (configuredTrace !== undefined)
+        return configuredTrace;
+    return extractionTraceEnabled(env);
+}
 export function getExtractionTraceLogPath(env = process.env, home = os.homedir()) {
     const dir = env.PROGRESS_TRACE_LOG_DIR ??
         path.join(home, '.claude-code-ui', 'plugins', 'cloudcli-plugin-progress');
