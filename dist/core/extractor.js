@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { validateProgressTree } from './schema.js';
+import { estimateTokens, measureConversationTurns, } from './trace.js';
 const SYSTEM_PROMPT = `You are a session progress extractor. Your job is to analyze conversation turns and produce a two-level progress tree.
 
 Rules:
@@ -206,10 +207,24 @@ function chunkTurns(turns, size) {
     }
     return chunks;
 }
+function usageTrace(usage) {
+    const trace = {
+        inputTokens: usage?.input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+    };
+    if (usage?.cache_creation_input_tokens !== undefined) {
+        trace.cacheCreationInputTokens = usage.cache_creation_input_tokens;
+    }
+    if (usage?.cache_read_input_tokens !== undefined) {
+        trace.cacheReadInputTokens = usage.cache_read_input_tokens;
+    }
+    return trace;
+}
 export class LLMExtractionEngineImpl {
     constructor(options) {
         this.usageListeners = [];
         this.config = options.config;
+        this.trace = options.trace;
         this.client =
             options.client ??
                 new Anthropic({
@@ -219,17 +234,27 @@ export class LLMExtractionEngineImpl {
                     timeout: this.config.requestTimeoutMs ?? 60000,
                 });
     }
-    async extract(tree, turns, onProgress) {
-        if (this.config.usePolling && turns.length > 5) {
-            return this.extractByPolling(tree, turns, onProgress);
+    async extract(tree, turns, onProgress, traceContext) {
+        if (traceContext && this.trace) {
+            this.trace({
+                type: 'conversation',
+                context: traceContext,
+                turnCount: turns.length,
+                turnIds: turns.map((turn) => turn.promptId),
+                turns,
+                metrics: measureConversationTurns(turns),
+            });
         }
-        const result = await this.extractWithRetry(tree, turns);
+        if (this.config.usePolling && turns.length > 5) {
+            return this.extractByPolling(tree, turns, onProgress, traceContext);
+        }
+        const result = await this.extractWithRetry(tree, turns, traceContext);
         onProgress?.(result);
         return result;
     }
-    async extractWithRetry(tree, turns) {
+    async extractWithRetry(tree, turns, traceContext) {
         try {
-            return await this.doExtract(tree, summarizeTurns(turns, 20), false);
+            return await this.doExtract(tree, summarizeTurns(turns, 20), false, traceContext, 1);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
@@ -238,25 +263,33 @@ export class LLMExtractionEngineImpl {
                 message.includes('SyntaxError')) {
                 // Prompt likely too large or model returned malformed JSON; retry with
                 // only the last 5 summarized turns and a stricter prompt.
-                return await this.doExtract(tree, summarizeTurns(turns, 5), true);
+                return await this.doExtract(tree, summarizeTurns(turns, 5), true, traceContext, 2);
             }
             // Retry once with a stricter prompt before giving up.
-            return await this.doExtract(tree, summarizeTurns(turns, 20), true);
+            return await this.doExtract(tree, summarizeTurns(turns, 20), true, traceContext, 2);
         }
     }
-    async extractByPolling(tree, turns, onProgress) {
+    async extractByPolling(tree, turns, onProgress, traceContext) {
         const chunkSize = 5;
         const chunks = chunkTurns(turns, chunkSize);
         let currentTree = tree;
-        for (const chunk of chunks) {
+        for (let index = 0; index < chunks.length; index++) {
+            const chunk = chunks[index];
+            const chunkContext = traceContext
+                ? {
+                    ...traceContext,
+                    chunkIndex: index + 1,
+                    chunkTotal: chunks.length,
+                }
+                : undefined;
             try {
-                currentTree = await this.extractWithRetry(currentTree, chunk);
+                currentTree = await this.extractWithRetry(currentTree, chunk, chunkContext);
             }
             catch (err) {
                 // If the accumulated tree makes the prompt too large, fall back to
                 // extracting this chunk independently before giving up.
                 console.warn('Chunk extraction failed with accumulated tree, retrying with empty tree:', err.message);
-                currentTree = await this.extractWithRetry({ version: 0, goals: [] }, chunk);
+                currentTree = await this.extractWithRetry({ version: 0, goals: [] }, chunk, chunkContext);
             }
             onProgress?.(currentTree);
         }
@@ -271,13 +304,39 @@ export class LLMExtractionEngineImpl {
             }
         };
     }
-    async doExtract(tree, turns, strict) {
+    async doExtract(tree, turns, strict, traceContext, attempt = 1) {
+        const prompt = buildPrompt(tree, turns, strict);
+        if (traceContext && this.trace) {
+            this.trace({
+                type: 'prompt',
+                context: traceContext,
+                attempt,
+                strict,
+                turnWindow: turns.length,
+                promptCharacters: prompt.length,
+                estimatedPromptTokens: estimateTokens(prompt),
+                prompt,
+            });
+        }
         const response = await this.client.messages.create({
             model: this.config.model,
             max_tokens: this.config.maxTokens ?? 4096,
             system: SYSTEM_PROMPT,
-            messages: [{ role: 'user', content: buildPrompt(tree, turns, strict) }],
+            messages: [{ role: 'user', content: prompt }],
         });
+        const usage = response.usage;
+        if (traceContext && this.trace) {
+            this.trace({
+                type: 'usage',
+                context: traceContext,
+                attempt,
+                usage: usageTrace(usage),
+            });
+        }
+        this.usageListeners.forEach((cb) => cb({
+            inputTokens: usage?.input_tokens ?? 0,
+            outputTokens: usage?.output_tokens ?? 0,
+        }));
         const text = response.content
             .map((block) => (block.type === 'text' ? block.text : ''))
             .join('');
@@ -287,11 +346,6 @@ export class LLMExtractionEngineImpl {
         if (errors.length > 0) {
             throw new Error('Schema validation failed: ' + errors.join('; '));
         }
-        const usage = response.usage;
-        this.usageListeners.forEach((cb) => cb({
-            inputTokens: usage?.input_tokens ?? 0,
-            outputTokens: usage?.output_tokens ?? 0,
-        }));
         return parsed;
     }
 }

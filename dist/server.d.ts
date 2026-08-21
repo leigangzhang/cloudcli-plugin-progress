@@ -6,6 +6,7 @@ export interface ProgressServerOptions {
     snapshotDir?: string;
     extractor?: LLMExtractionEngine;
     detectorOptions?: import('./core/diff-detector.js').DiffDetectorOptions;
+    traceExtractions?: boolean;
 }
 export declare class ProgressServer {
     private httpServer?;
@@ -26,6 +27,8 @@ export declare class ProgressServer {
     private bindDetector;
     private migrateClients;
     private getSessionTurns;
+    private buildTraceContext;
+    private traceExtraction;
     private getOrCreateSession;
     private resolveSessionId;
     private handleHttp;

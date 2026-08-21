@@ -153,6 +153,12 @@ describe('ProgressServer Codex sessions', () => {
     await wait(500);
 
     expect(mockExtractor.extract).toHaveBeenCalledTimes(before + 1);
+    const incrementalCall = (mockExtractor.extract as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+    expect(incrementalCall[3]).toMatchObject({
+      provider: 'codex',
+      mode: 'incremental',
+      parseScope: 'full_file',
+    });
     const turn = await fetchJson(
       port,
       'GET',
@@ -174,5 +180,11 @@ describe('ProgressServer Codex sessions', () => {
     expect(refresh.status).toBe(200);
     const tree = refresh.data.tree as ProgressTree;
     expect(tree.goals[0].id).toBe('codex-goal');
+    const fullCall = (mockExtractor.extract as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+    expect(fullCall[3]).toMatchObject({
+      provider: 'codex',
+      mode: 'full',
+      parseScope: 'full_file',
+    });
   });
 });

@@ -1,5 +1,7 @@
 // Core data structures shared across the progress plugin.
 
+import type { ExtractionTraceContext } from './trace.js';
+
 export type LogEntryType =
   | 'assistant'
   | 'user'
@@ -169,6 +171,7 @@ export interface LLMExtractionEngine {
     tree: ProgressTree,
     turns: ConversationTurn[],
     onProgress?: (tree: ProgressTree) => void,
+    traceContext?: ExtractionTraceContext,
   ): Promise<ProgressTree>;
   onUsage(callback: (usage: { inputTokens: number; outputTokens: number }) => void): () => void;
 }
