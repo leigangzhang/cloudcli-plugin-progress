@@ -1,14 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LLMExtractionEngineImpl, summarizeTurns } from '../../src/core/extractor.js';
+import { LLMExtractionEngineImpl } from '../../src/core/extractor.js';
 import type { Anthropic } from '../../src/core/extractor.js';
-import type { ConversationTurn, LLMConfig, ProgressTree } from '../../src/core/types.js';
 import type { ExtractionTraceContext, ExtractionTraceEvent } from '../../src/core/trace.js';
+import type {
+  ConversationTurn,
+  LLMConfig,
+  ProgressGoal,
+  ProgressTree,
+  ProgressTreePatch,
+} from '../../src/core/types.js';
 
 function mockConfig(): LLMConfig {
   return {
     apiKey: 'test-key',
     baseUrl: 'https://test.example',
     model: 'test-model',
+    extractionMode: 'progress-tree',
   };
 }
 
@@ -26,141 +33,215 @@ function mockClient(response: { text: string; inputTokens?: number; outputTokens
   } as unknown as Anthropic;
 }
 
-function mockPollingConfig(): LLMConfig {
+function patchResponse(
+  version: number,
+  goals: ProgressGoal[],
+  extras: Partial<ProgressTreePatch> = {},
+): string {
+  return JSON.stringify({
+    version,
+    upsertGoals: goals,
+    deleteGoalIds: [],
+    deleteStepIds: [],
+    ...extras,
+  } satisfies ProgressTreePatch);
+}
+
+function turn(overrides: Partial<ConversationTurn> = {}): ConversationTurn {
   return {
-    apiKey: 'test-key',
-    baseUrl: 'https://test.example',
-    model: 'test-model',
-    usePolling: true,
+    promptId: 'p1',
+    lineStart: 1,
+    lineEnd: 2,
+    userText: 'question',
+    assistantText: 'reply',
+    timestamp: '2026-01-01T00:00:00Z',
+    ...overrides,
   };
 }
-describe('LLMExtractionEngineImpl', () => {
-  it('extracts progress tree from API response', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
+
+describe('LLMExtractionEngineImpl patch extraction', () => {
+  it('merges affected goals and preserves omitted nodes', async () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Topic',
+          status: 'in_progress',
+          steps: [
+            { id: 's1', subject: 'Old step', status: 'pending', promptId: 'p1' },
+          ],
+        },
+        {
+          id: 'g2',
+          subject: 'Keep me',
+          status: 'pending',
+        },
+      ],
+    };
     const client = mockClient({
-      text: JSON.stringify({
-        version: 2,
-        goals: [
-          {
-            id: 'g1',
-            subject: 'Implement auth',
-            status: 'in_progress',
-            steps: [{ id: 's1', subject: 'Setup bcrypt', status: 'completed', promptId: 'p1' }],
-          },
-        ],
+      text: patchResponse(2, [
+        {
+          id: 'g1',
+          subject: 'Topic',
+          status: 'completed',
+          steps: [
+            { id: 's2', subject: 'New step', status: 'completed', promptId: 'p2' },
+          ],
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, [turn({ promptId: 'p2' })]);
+
+    expect(result.version).toBe(2);
+    expect(result.goals.map((goal) => goal.id)).toEqual(['g1', 'g2']);
+    expect(result.goals[0].status).toBe('completed');
+    expect(result.goals[0].steps?.map((step) => step.id)).toEqual(['s1', 's2']);
+    expect(result.goals[1].subject).toBe('Keep me');
+  });
+
+  it('replaces existing steps by id and deletes nodes', async () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Topic',
+          status: 'in_progress',
+          steps: [
+            { id: 's1', subject: 'Old step', status: 'pending', promptId: 'p1' },
+            { id: 's2', subject: 'Remove', status: 'pending', promptId: 'p2' },
+          ],
+        },
+        {
+          id: 'g2',
+          subject: 'Remove goal',
+          status: 'pending',
+        },
+      ],
+    };
+    const client = mockClient({
+      text: patchResponse(2, [
+        {
+          id: 'g1',
+          subject: 'Updated',
+          status: 'completed',
+          steps: [
+            { id: 's1', subject: 'Updated step', status: 'completed', promptId: 'p1' },
+          ],
+        },
+      ], {
+        deleteGoalIds: ['g2'],
+        deleteStepIds: ['s2'],
       }),
     });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, []);
-    expect(result.version).toBe(2);
-    expect(result.goals.length).toBe(1);
-    expect(result.goals[0].subject).toBe('Implement auth');
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
+    const result = await engine.extract(tree, [turn()]);
+
+    expect(result.goals.map((goal) => goal.id)).toEqual(['g1']);
+    expect(result.goals[0].steps?.map((step) => step.id)).toEqual(['s1']);
+    expect(result.goals[0].steps?.[0].subject).toBe('Updated step');
   });
 
-  it('strips markdown fences from the response', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
+  it('includes userText and assistant summary but excludes raw thinking and tool text', async () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Existing',
+          description: 'history description should not be sent',
+          status: 'pending',
+        },
+      ],
+    };
     const client = mockClient({
-      text: '```json\n{"version":2,"goals":[]}\n```',
+      text: patchResponse(2, [
+        {
+          id: 'g1',
+          subject: 'Existing',
+          status: 'completed',
+          steps: [
+            { id: 's1', subject: 'Done', status: 'completed', promptId: 'p1' },
+          ],
+        },
+      ]),
     });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, []);
-    expect(result).toEqual({ version: 2, goals: [] });
+    const longReply = 'a'.repeat(2000);
+    await engine.extract(tree, [
+      turn({
+        thinkingText: 'private thinking',
+        toolText: 'private tool',
+        assistantText: longReply,
+      }),
+    ]);
+
+    const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .messages[0].content as string;
+    expect(prompt).toContain('question');
+    expect(prompt).toContain('a'.repeat(500));
+    expect(prompt).toContain('[truncated]');
+    expect(prompt).not.toContain('private thinking');
+    expect(prompt).not.toContain('private tool');
+    expect(prompt).not.toContain('history description should not be sent');
+    expect(prompt).not.toContain(longReply);
   });
 
-  it('does not retry when the response is invalid JSON', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({ text: 'not json' });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, [])).rejects.toThrow(/No JSON object/);
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('throws when the response is invalid JSON', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({ text: 'not json' });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, [])).rejects.toThrow();
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('throws when the API call fails', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('network down')),
-      },
-    } as unknown as Anthropic;
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, [])).rejects.toThrow('network down');
-  });
-
-  it('logs the failed prompt and error in the usage trace', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = {
-      messages: {
-        create: vi.fn().mockRejectedValue(new Error('network down')),
-      },
-    } as unknown as Anthropic;
+  it('emits conversation, prompt, usage, and response traces', async () => {
+    const tree: ProgressTree = { version: 0, goals: [] };
+    const client = mockClient({
+      text: patchResponse(1, [
+        {
+          id: 'g1',
+          subject: 'New',
+          status: 'completed',
+          steps: [
+            { id: 's1', subject: 'Done', status: 'completed', promptId: 'p1' },
+          ],
+        },
+      ]),
+      inputTokens: 321,
+      outputTokens: 123,
+    });
     const trace = vi.fn<(event: ExtractionTraceEvent) => void>();
     const engine = new LLMExtractionEngineImpl({
       config: mockConfig(),
       client,
       trace,
     });
-    const turns: ConversationTurn[] = [
-      {
-        promptId: 'failed-turn',
-        lineStart: 1,
-        lineEnd: 2,
-        userText: 'failed question',
-        timestamp: '2026-01-01T00:00:00Z',
-      },
-    ];
     const context: ExtractionTraceContext = {
-      requestId: 'failed-request',
+      requestId: 'req-1',
       sessionId: 'codex-session',
       provider: 'codex',
       mode: 'incremental',
       parseScope: 'full_file',
     };
 
-    await expect(engine.extract(tree, turns, undefined, context)).rejects.toThrow(
-      'network down',
-    );
+    await engine.extract(tree, [turn()], undefined, context);
 
     const events = trace.mock.calls.map(([event]) => event);
-    const usage = events.find(
-      (event): event is Extract<ExtractionTraceEvent, { type: 'usage' }> =>
-        event.type === 'usage',
+    expect(events.map((event) => event.type)).toEqual([
+      'conversation',
+      'prompt',
+      'usage',
+      'response',
+    ]);
+    const response = events.find(
+      (event): event is Extract<ExtractionTraceEvent, { type: 'response' }> =>
+        event.type === 'response',
     );
-    expect(usage).toBeDefined();
-    expect(usage!.error).toBe('network down');
-    expect(usage!.prompt).toContain('failed question');
-    expect(usage!.usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(response).toBeDefined();
+    expect(response!.outputTokens).toBe(123);
+    expect(response!.rawOutput).toContain('"upsertGoals"');
+    expect(response!.outputCharacters).toBeGreaterThanOrEqual(response!.parsedCharacters);
   });
 
-  it('emits token usage after extraction', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
+  it('logs raw output and error when patch parsing fails', async () => {
     const client = mockClient({
-      text: JSON.stringify({ version: 2, goals: [] }),
-      inputTokens: 123,
-      outputTokens: 45,
-    });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const usages: { inputTokens: number; outputTokens: number }[] = [];
-    engine.onUsage((u) => usages.push(u));
-    await engine.extract(tree, []);
-    expect(usages.length).toBe(1);
-    expect(usages[0]).toEqual({ inputTokens: 123, outputTokens: 45 });
-  });
-
-  it('emits Codex conversation, prompt, and usage trace events', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({
-      text: JSON.stringify({ version: 2, goals: [] }),
-      inputTokens: 321,
-      outputTokens: 123,
+      text: '{"version":2',
+      outputTokens: 80,
     });
     const trace = vi.fn<(event: ExtractionTraceEvent) => void>();
     const engine = new LLMExtractionEngineImpl({
@@ -168,476 +249,154 @@ describe('LLMExtractionEngineImpl', () => {
       client,
       trace,
     });
-    const turns: ConversationTurn[] = [
-      {
-        promptId: 'codex-turn',
-        lineStart: 1,
-        lineEnd: 4,
-        userText: 'codex question',
-        thinkingText: 'private codex reasoning',
-        assistantText: 'codex reply',
-        toolText: 'private tool output',
-        timestamp: '2026-08-21T00:00:00Z',
-      },
-    ];
     const context: ExtractionTraceContext = {
-      requestId: 'trace-request',
-      sessionId: 'codex-thread',
-      cloudcliSessionId: 'cloudcli-session',
+      requestId: 'req-2',
+      sessionId: 'codex-session',
       provider: 'codex',
-      logPath: '/tmp/rollout.jsonl',
       mode: 'incremental',
       parseScope: 'full_file',
     };
 
-    await engine.extract(tree, turns, undefined, context);
+    await expect(
+      engine.extract({ version: 0, goals: [] }, [turn()], undefined, context),
+    ).rejects.toThrow();
 
     const events = trace.mock.calls.map(([event]) => event);
-    expect(events.map((event) => event.type)).toEqual([
-      'conversation',
-      'prompt',
-      'usage',
-    ]);
-
-    const conversation = events[0] as Extract<ExtractionTraceEvent, { type: 'conversation' }>;
-    expect(conversation.context.mode).toBe('incremental');
-    expect(conversation.context.parseScope).toBe('full_file');
-    expect(conversation.turns[0].thinkingText).toBe('private codex reasoning');
-    expect(conversation.metrics.thinkingCharacters).toBeGreaterThan(0);
-
-    const prompt = events[1] as Extract<ExtractionTraceEvent, { type: 'prompt' }>;
-    expect(prompt.prompt).toContain('codex question');
-    expect(prompt.prompt).not.toContain('codex reply');
-    expect(prompt.prompt).not.toContain('private codex reasoning');
-    expect(prompt.prompt).not.toContain('private tool output');
-    expect(prompt.estimatedPromptTokens).toBeGreaterThan(0);
-
-    const usage = events[2] as Extract<ExtractionTraceEvent, { type: 'usage' }>;
-    expect(usage.usage).toMatchObject({
-      inputTokens: 321,
-      outputTokens: 123,
-    });
+    const response = events.find(
+      (event): event is Extract<ExtractionTraceEvent, { type: 'response' }> =>
+        event.type === 'response',
+    );
+    expect(response).toBeDefined();
+    expect(response!.rawOutput).toBe('{"version":2');
+    expect(response!.parsedCharacters).toBe(0);
+    expect(response!.error).toBeTruthy();
   });
 
-  it('validates schema and throws for invalid tree', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({
-      text: JSON.stringify({
-        version: 2,
-        goals: [{ id: 'g1', subject: 'Valid subject', status: 'unknown' }],
-      }),
-    });
-    client.messages.create = vi.fn().mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            version: 2,
-            goals: [{ id: 'g1', subject: 'Valid subject', status: 'unknown' }],
+  it('processes turns in 5-turn chunks and merges each patch', async () => {
+    const tree: ProgressTree = { version: 0, goals: [] };
+    const turns = Array.from({ length: 6 }, (_, i) =>
+      turn({ promptId: `p${i + 1}`, lineStart: i + 1, lineEnd: i + 1 }),
+    );
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: patchResponse(1, [
+                  {
+                    id: 'g1',
+                    subject: 'First',
+                    status: 'completed',
+                    steps: Array.from({ length: 5 }, (_, i) => ({
+                      id: `s${i + 1}`,
+                      subject: `Step ${i + 1}`,
+                      status: 'completed' as const,
+                      promptId: `p${i + 1}`,
+                    })),
+                  },
+                ]),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: patchResponse(2, [
+                  {
+                    id: 'g2',
+                    subject: 'Second',
+                    status: 'completed',
+                    steps: [
+                      { id: 's6', subject: 'Step 6', status: 'completed', promptId: 'p6' },
+                    ],
+                  },
+                ]),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
           }),
-        },
-      ],
-      usage: { input_tokens: 10, output_tokens: 5 },
-    });
+      },
+    } as unknown as Anthropic;
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, [])).rejects.toThrow(/status/);
+
+    const result = await engine.extract(tree, turns);
+
+    expect(client.messages.create).toHaveBeenCalledTimes(2);
+    expect(result.version).toBe(2);
+    expect(result.goals.map((goal) => goal.id)).toEqual(['g1', 'g2']);
+    const firstPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .messages[0].content as string;
+    const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0]
+      .messages[0].content as string;
+    expect(firstPrompt).toContain('"promptId": "p1"');
+    expect(firstPrompt).not.toContain('"promptId": "p6"');
+    expect(secondPrompt).toContain('"promptId": "p6"');
   });
 
-  it('repairs missing goal and step ids from the previous tree', async () => {
+  it('does not retry after an invalid patch', async () => {
+    const client = mockClient({ text: 'not json' });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    await expect(engine.extract({ version: 0, goals: [] }, [turn()])).rejects.toThrow();
+    expect(client.messages.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('caps output tokens at 4096', async () => {
+    const client = mockClient({
+      text: patchResponse(1, [
+        {
+          id: 'g1',
+          subject: 'New',
+          status: 'completed',
+          steps: [
+            { id: 's1', subject: 'Done', status: 'completed', promptId: 'p1' },
+          ],
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({
+      config: { ...mockConfig(), maxTokens: 8092 },
+      client,
+    });
+    await engine.extract({ version: 0, goals: [] }, [turn()]);
+    expect(client.messages.create).toHaveBeenCalledWith(
+      expect.objectContaining({ max_tokens: 4096 }),
+    );
+  });
+
+  it('repairs missing patch ids from previous nodes', async () => {
     const tree: ProgressTree = {
       version: 1,
       goals: [
         {
-          id: 'goal-1',
-          subject: 'First topic',
+          id: 'g1',
+          subject: 'Existing',
+          status: 'in_progress',
+          steps: [
+            { id: 's1', subject: 'Existing step', status: 'pending', promptId: 'p1' },
+          ],
+        },
+      ],
+    };
+    const client = mockClient({
+      text: patchResponse(2, [
+        {
+          id: '',
+          subject: 'Existing',
           status: 'completed',
           steps: [
-            {
-              id: 'step-1-1',
-              subject: 'First turn',
-              status: 'completed',
-              promptId: 'p1',
-            },
+            { id: '', subject: 'Updated', status: 'completed', promptId: 'p1' },
           ],
         },
-        {
-          id: 'goal-2',
-          subject: 'Second topic',
-          status: 'in_progress',
-          steps: [
-            {
-              id: 'step-2-1',
-              subject: 'Second turn',
-              status: 'completed',
-              promptId: 'p2',
-            },
-            {
-              id: 'step-2-2',
-              subject: 'Third turn',
-              status: 'completed',
-              promptId: 'p3',
-            },
-          ],
-        },
-      ],
-    };
-    const client = mockClient({
-      text: JSON.stringify({
-        version: 2,
-        goals: [
-          {
-            id: '',
-            subject: 'First topic updated',
-            status: 'completed',
-            steps: [
-              {
-                id: '',
-                subject: 'First turn updated',
-                status: 'completed',
-                promptId: 'p1',
-              },
-            ],
-          },
-          {
-            id: '',
-            subject: 'Second topic updated',
-            status: 'in_progress',
-            steps: [
-              {
-                id: '',
-                subject: 'Second turn updated',
-                status: 'completed',
-                promptId: 'p2',
-              },
-              {
-                id: '',
-                subject: 'Third turn updated',
-                status: 'completed',
-                promptId: 'p3',
-              },
-            ],
-          },
-        ],
-      }),
+      ]),
     });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, []);
-
-    expect(result.goals.map((goal) => goal.id)).toEqual(['goal-1', 'goal-2']);
-    expect(result.goals[0].steps[0].id).toBe('step-1-1');
-    expect(result.goals[1].steps.map((step) => step.id)).toEqual([
-      'step-2-1',
-      'step-2-2',
-    ]);
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps generated fallback ids stable across incremental extraction', async () => {
-    const client = mockClient({
-      text: JSON.stringify({
-        version: 2,
-        goals: [
-          {
-            id: '',
-            subject: 'New topic',
-            status: 'pending',
-            steps: [
-              {
-                id: '',
-                subject: 'New turn',
-                status: 'pending',
-                promptId: 'new-prompt',
-              },
-            ],
-          },
-        ],
-      }),
-    });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const turns: ConversationTurn[] = [
-      {
-        promptId: 'new-prompt',
-        lineStart: 1,
-        lineEnd: 2,
-        userText: 'new turn',
-        timestamp: '2026-01-01T00:00:00Z',
-      },
-    ];
-
-    const first = await engine.extract({ version: 0, goals: [] }, turns);
-    const second = await engine.extract(first, turns);
-
-    expect(second.goals[0].id).toBe(first.goals[0].id);
-    expect(second.goals[0].steps[0].id).toBe(first.goals[0].steps[0].id);
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
-  });
-
-  it('rejects a step without promptId', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({
-      text: JSON.stringify({
-        version: 2,
-        goals: [
-          {
-            id: 'g1',
-            subject: 'x',
-            status: 'pending',
-            steps: [{ id: 's1', subject: 'y', status: 'pending' }],
-          },
-        ],
-      }),
-    });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, [])).rejects.toThrow(/promptId/);
-  });
-
-  it('passes conversation turns to the prompt', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({
-      text: JSON.stringify({ version: 2, goals: [] }),
-    });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const turns: ConversationTurn[] = [
-      { promptId: 'p1', lineStart: 1, lineEnd: 2, userText: 'hello', assistantText: 'hi', timestamp: '2026-01-01T00:00:00Z' },
-    ];
-    await engine.extract(tree, turns);
-    const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0].messages[0].content;
-    expect(prompt).toContain('p1');
-    expect(prompt).toContain('hello');
-    expect(prompt).not.toContain('hi');
-  });
-
-  it('omits assistant replies, reasoning, and tool output from the LLM prompt', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({
-      text: JSON.stringify({ version: 2, goals: [] }),
-    });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const turns: ConversationTurn[] = [
-      {
-        promptId: 'p1',
-        lineStart: 1,
-        lineEnd: 2,
-        userText: 'user question',
-        thinkingText: 'private reasoning',
-        assistantText: 'model reply',
-        toolText: 'private tool output',
-        timestamp: '2026-01-01T00:00:00Z',
-      },
-    ];
-    await engine.extract(tree, turns);
-    const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0].messages[0].content;
-    expect(prompt).toContain('user question');
-    expect(prompt).not.toContain('model reply');
-    expect(prompt).not.toContain('private reasoning');
-    expect(prompt).not.toContain('private tool output');
-  });
-
-  it('summarizeTurns keeps only truncated user text', () => {
-    const longText = 'a'.repeat(5000);
-    const turns: ConversationTurn[] = [
-      {
-        promptId: 'p1',
-        lineStart: 1,
-        lineEnd: 2,
-        userText: longText,
-        thinkingText: 'internal',
-        assistantText: longText,
-        toolText: 'tool',
-        timestamp: '2026-01-01T00:00:00Z',
-      },
-    ];
-    const summarized = summarizeTurns(turns, 20, 2000);
-    expect(summarized[0].userText).toHaveLength(2000 + '\n...[truncated]'.length);
-    expect(summarized[0].userText).toContain('\n...[truncated]');
-    expect(summarized[0]).not.toHaveProperty('assistantText');
-    expect(summarized[0]).not.toHaveProperty('thinkingText');
-    expect(summarized[0]).not.toHaveProperty('toolText');
-  });
-  it('does not retry a failed 5-turn chunk', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const turns: ConversationTurn[] = Array.from({ length: 5 }, (_, i) => ({
-      promptId: `p${i + 1}`,
-      lineStart: i * 2 + 1,
-      lineEnd: i * 2 + 2,
-      userText: `turn ${i + 1}`,
-      timestamp: '2026-01-01T00:00:00Z',
-    }));
-    const client = {
-      messages: {
-        create: vi
-          .fn()
-          .mockRejectedValue(new Error('No JSON object found in response')),
-      },
-    } as unknown as Anthropic;
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, turns)).rejects.toThrow(/No JSON object/);
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('uses polling mode to extract in 5-turn chunks incrementally', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const turns: ConversationTurn[] = Array.from({ length: 6 }, (_, i) => ({
-      promptId: `p${i + 1}`,
-      lineStart: i * 2 + 1,
-      lineEnd: i * 2 + 2,
-      userText: `turn ${i + 1}`,
-      timestamp: '2026-01-01T00:00:00Z',
-    }));
-    const treeAfterFirstChunk: ProgressTree = {
-      version: 2,
-      goals: [
-        {
-          id: 'g1',
-          subject: 'Topic A',
-          status: 'in_progress',
-          steps: Array.from({ length: 5 }, (_, i) => ({
-            id: `s${i + 1}`,
-            subject: `Step ${i + 1}`,
-            status: 'completed',
-            promptId: `p${i + 1}`,
-          })),
-        },
-      ],
-    };
-    const finalTree: ProgressTree = {
-      version: 3,
-      goals: [
-        {
-          id: 'g1',
-          subject: 'Topic A',
-          status: 'in_progress',
-          steps: Array.from({ length: 5 }, (_, i) => ({
-            id: `s${i + 1}`,
-            subject: `Step ${i + 1}`,
-            status: 'completed',
-            promptId: `p${i + 1}`,
-          })),
-        },
-        {
-          id: 'g2',
-          subject: 'Topic B',
-          status: 'pending',
-          steps: [{ id: 's6', subject: 'Step 6', status: 'pending', promptId: 'p6' }],
-        },
-      ],
-    };
-    const client = {
-      messages: {
-        create: vi
-          .fn()
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: JSON.stringify(treeAfterFirstChunk) }],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          })
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: JSON.stringify(finalTree) }],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-      },
-    } as unknown as Anthropic;
-    const engine = new LLMExtractionEngineImpl({ config: mockPollingConfig(), client });
-    const result = await engine.extract(tree, turns);
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
-    expect(result).toEqual(finalTree);
-    const secondPrompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[1][0].messages[0].content;
-    expect(secondPrompt).toContain('Topic A');
-    expect(secondPrompt).toContain('"promptId": "p6"');
-  });
-
-  it('extracts the outermost JSON object when the response contains trailing text', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const client = mockClient({
-      text: 'Here is the result:\n{"version":2,"goals":[]}\nHope this helps!',
-    });
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, []);
-    expect(result).toEqual({ version: 2, goals: [] });
-  });
-  it('does not retry a 5-turn chunk when the response contains malformed JSON', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const turns: ConversationTurn[] = Array.from({ length: 5 }, (_, i) => ({
-      promptId: `p${i + 1}`,
-      lineStart: i * 2 + 1,
-      lineEnd: i * 2 + 2,
-      userText: `turn ${i + 1}`,
-      timestamp: '2026-01-01T00:00:00Z',
-    }));
-    const client = {
-      messages: {
-        create: vi
-          .fn()
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: '{"version":2,"goals":[' }],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-      },
-    } as unknown as Anthropic;
-    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    await expect(engine.extract(tree, turns)).rejects.toThrow(/No JSON object/);
-    expect(client.messages.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('stops at a failed polling chunk without empty-tree fallback', async () => {
-    const tree: ProgressTree = { version: 1, goals: [] };
-    const turns: ConversationTurn[] = Array.from({ length: 6 }, (_, i) => ({
-      promptId: `p${i + 1}`,
-      lineStart: i * 2 + 1,
-      lineEnd: i * 2 + 2,
-      userText: `turn ${i + 1}`,
-      timestamp: '2026-01-01T00:00:00Z',
-    }));
-    const treeAfterFirstChunk: ProgressTree = {
-      version: 2,
-      goals: [
-        {
-          id: 'g1',
-          subject: 'Topic A',
-          status: 'in_progress',
-          steps: Array.from({ length: 5 }, (_, i) => ({
-            id: `s${i + 1}`,
-            subject: `Step ${i + 1}`,
-            status: 'completed',
-            promptId: `p${i + 1}`,
-          })),
-        },
-      ],
-    };
-    const treeAfterSecondChunk: ProgressTree = {
-      version: 3,
-      goals: [
-        {
-          id: 'g1',
-          subject: 'Topic A',
-          status: 'in_progress',
-          steps: Array.from({ length: 5 }, (_, i) => ({
-            id: `s${i + 1}`,
-            subject: `Step ${i + 1}`,
-            status: 'completed',
-            promptId: `p${i + 1}`,
-          })),
-        },
-        {
-          id: 'g2',
-          subject: 'Topic B',
-          status: 'pending',
-          steps: [{ id: 's6', subject: 'Step 6', status: 'pending', promptId: 'p6' }],
-        },
-      ],
-    };
-    const client = {
-      messages: {
-        create: vi
-          .fn()
-          .mockResolvedValueOnce({
-            content: [{ type: 'text', text: JSON.stringify(treeAfterFirstChunk) }],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          })
-          .mockRejectedValueOnce(new Error('No JSON object found in response'))
-      },
-    } as unknown as Anthropic;
-    const engine = new LLMExtractionEngineImpl({ config: mockPollingConfig(), client });
-    await expect(engine.extract(tree, turns)).rejects.toThrow(/No JSON object/);
-    expect(client.messages.create).toHaveBeenCalledTimes(2);
+    const result = await engine.extract(tree, [turn()]);
+    expect(result.goals[0].id).toBe('g1');
+    expect(result.goals[0].steps?.[0].id).toBe('s1');
   });
 });

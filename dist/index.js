@@ -1491,6 +1491,7 @@ function mount(container, api) {
   container.appendChild(root);
   let tree = { version: 0, goals: [] };
   let status = "idle";
+  let extractionMode = "default";
   let errorMessage;
   let expanded = /* @__PURE__ */ new Set();
   let turnExpanded = /* @__PURE__ */ new Set();
@@ -1524,12 +1525,23 @@ function mount(container, api) {
     const refreshDisabled = isRefreshing ? "opacity:0.6;cursor:not-allowed;" : "";
     const refreshHover = isRefreshing ? "" : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
+    const modeControl = `
+      <div class="pp-mode-control" style="display:inline-flex;border:1px solid ${colors.border};border-radius:4px;overflow:hidden;">
+        ${["default", "progress-tree"].map((mode) => {
+      const active = mode === extractionMode;
+      return `<button data-mode="${mode}" style="border:0;padding:4px 9px;font-size:0.68rem;background:${active ? colors.surface : colors.dim};color:${colors.text};cursor:pointer;">${mode === "default" ? "Default" : "ProgressTree"}</button>`;
+    }).join("")}
+      </div>
+    `;
     const header = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
-        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
-          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
-        </button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${modeControl}
+          <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+            <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
+          </button>
+        </div>
       </div>
     `;
     root.innerHTML = header + renderProgressTree(
@@ -1562,6 +1574,12 @@ function mount(container, api) {
     });
     const refreshBtn = root.querySelector("#pp-refresh");
     refreshBtn?.addEventListener("click", () => void refresh());
+    root.querySelectorAll("[data-mode]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const mode = el.dataset.mode;
+        if (mode !== extractionMode) void setMode(mode);
+      });
+    });
   }
   async function toggleStep(el) {
     const stepId = el.dataset.stepId;
@@ -1592,6 +1610,7 @@ function mount(container, api) {
     if (isProgressResponse(res)) {
       tree = res.tree;
       status = res.status;
+      extractionMode = res.extractionMode ?? "default";
       errorMessage = res.error;
       return;
     }
@@ -1671,6 +1690,18 @@ function mount(container, api) {
       isRefreshing = false;
       render();
     }
+  }
+  async function setMode(mode) {
+    const sid = currentRealSessionId ?? currentSessionId;
+    if (!sid || mode === extractionMode) return;
+    try {
+      const res = await api.rpc("POST", "/mode", { sessionId: sid, mode });
+      applyResponse(res);
+    } catch (err) {
+      status = "error";
+      errorMessage = err.message;
+    }
+    render();
   }
   currentProjectPath = api.context.project?.path ?? null;
   currentSessionId = api.context.session?.id ?? null;

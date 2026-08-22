@@ -2,6 +2,8 @@
 
 import type { ExtractionTraceContext } from './trace.js';
 
+export type ExtractionMode = 'default' | 'progress-tree';
+
 export type LogEntryType =
   | 'assistant'
   | 'user'
@@ -110,9 +112,17 @@ export interface ProgressTree {
   goals: ProgressGoal[];
 }
 
+export interface ProgressTreePatch {
+  version: number;
+  upsertGoals: ProgressGoal[];
+  deleteGoalIds: string[];
+  deleteStepIds: string[];
+}
+
 export interface ProgressSnapshot {
   sessionId: string;
   tree: ProgressTree;
+  extractionMode: ExtractionMode;
   cursor: { bytesRead: number; lastLine: number };
   updatedAt: string;
 }
@@ -129,8 +139,14 @@ export interface RefreshRequest {
 export interface ProgressResponse {
   tree: ProgressTree;
   status: 'idle' | 'syncing' | 'error' | 'paused';
+  extractionMode: ExtractionMode;
   error?: string;
   sessionId?: string;
+}
+
+export interface ModeRequest {
+  sessionId: string;
+  mode: ExtractionMode;
 }
 
 export type ServerMessage =
@@ -149,6 +165,7 @@ export interface LLMConfig {
   requestTimeoutMs?: number;
   maxTokens?: number;
   usePolling?: boolean;
+  extractionMode?: ExtractionMode;
   traceExtractions?: boolean;
   traceLogDir?: string;
   traceLogFile?: string;
@@ -181,7 +198,9 @@ export interface LLMExtractionEngine {
 
 export interface ProgressStore {
   getState(): ProgressTree;
+  getExtractionMode(): ExtractionMode;
   setState(tree: ProgressTree): void;
+  setExtractionMode(mode: ExtractionMode): void;
   subscribe(callback: (tree: ProgressTree) => void): () => void;
   loadSnapshot(sessionId: string): boolean;
   saveSnapshot(sessionId: string): void;

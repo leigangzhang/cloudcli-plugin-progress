@@ -49,6 +49,15 @@ export type ExtractionTraceEvent = {
     usage: ExtractionUsageTrace;
     error?: string;
     prompt?: string;
+} | {
+    type: 'response';
+    context: ExtractionTraceContext;
+    attempt: number;
+    rawOutput: string;
+    outputCharacters: number;
+    parsedCharacters: number;
+    outputTokens: number;
+    error?: string;
 };
 export declare function estimateTokens(text: string | undefined): number;
 export declare function measureConversationTurns(turns: ConversationTurn[]): ConversationTraceMetrics;

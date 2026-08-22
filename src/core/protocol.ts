@@ -2,13 +2,19 @@
 
  import type {
    ClientMessage,
+   ExtractionMode,
    LogEntry,
+   ModeRequest,
    ProgressResponse,
    RefreshRequest,
    ServerMessage,
    SessionLogEntry,
    WatchRequest,
  } from './types.js';
+
+ export function isExtractionMode(value: unknown): value is ExtractionMode {
+   return value === 'default' || value === 'progress-tree';
+ }
 
  export function isLogEntry(value: unknown): value is SessionLogEntry {
    return (
@@ -31,6 +37,16 @@
  export function isRefreshRequest(value: unknown): value is RefreshRequest {
    const v = value as Record<string, unknown> | undefined;
    return typeof v === 'object' && v !== null && typeof v.sessionId === 'string';
+ }
+
+ export function isModeRequest(value: unknown): value is ModeRequest {
+   const v = value as Record<string, unknown> | undefined;
+   return (
+     typeof v === 'object' &&
+     v !== null &&
+     typeof v.sessionId === 'string' &&
+     isExtractionMode(v.mode)
+   );
  }
 
  export function isProgressResponse(value: unknown): value is ProgressResponse {

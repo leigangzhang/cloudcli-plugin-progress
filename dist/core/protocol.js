@@ -1,4 +1,7 @@
 // Type guards and safe parsing for frontend/backend messages.
+export function isExtractionMode(value) {
+    return value === 'default' || value === 'progress-tree';
+}
 export function isLogEntry(value) {
     return (typeof value === 'object' &&
         value !== null &&
@@ -14,6 +17,13 @@ export function isWatchRequest(value) {
 export function isRefreshRequest(value) {
     const v = value;
     return typeof v === 'object' && v !== null && typeof v.sessionId === 'string';
+}
+export function isModeRequest(value) {
+    const v = value;
+    return (typeof v === 'object' &&
+        v !== null &&
+        typeof v.sessionId === 'string' &&
+        isExtractionMode(v.mode));
 }
 export function isProgressResponse(value) {
     const v = value;

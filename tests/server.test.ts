@@ -119,7 +119,7 @@ describe('ProgressServer', () => {
     writeJsonl(logFile, [{ type: 'system', uuid: 's0' }]);
 
     await fetchJson(port, 'POST', '/watch', { projectPath, sessionId });
-    const { status, data } = await fetchJson(port, 'POST', '/refresh');
+    const { status, data } = await fetchJson(port, 'POST', '/refresh', { sessionId });
     expect(status).toBe(200);
     expect((data as { status: string }).status).toBe('idle');
   });
@@ -165,10 +165,14 @@ describe('ProgressServer', () => {
 describe('ProgressServer without API key', () => {
   let server: ProgressServer;
   let port: number;
+  let tmp: ReturnType<typeof createTempDir>;
 
   beforeAll(async () => {
+    tmp = createTempDir();
     server = new ProgressServer({
       config: { apiKey: '', model: 'unknown' },
+      projectsDir: path.join(tmp.path, 'projects'),
+      snapshotDir: path.join(tmp.path, 'snapshots'),
     });
     const result = await server.start();
     port = result.port;
@@ -176,12 +180,46 @@ describe('ProgressServer without API key', () => {
 
   afterAll(async () => {
     await server.stop();
+    tmp.cleanup();
   });
 
-  it('watch endpoint returns 200 and reports missing key in status', async () => {
+  it('watch endpoint works in default mode without an API key', async () => {
+    const projectPath = tmp.path;
+    const sessionId = 'sess-no-key';
+    const logFile = path.join(
+      tmp.path,
+      'projects',
+      encodeProjectPath(tmp.path),
+      `${sessionId}.jsonl`,
+    );
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    writeJsonl(logFile, [{ type: 'system', uuid: 's0' }]);
+
     const { status, data } = await fetchJson(port, 'POST', '/watch', {
+      projectPath,
+      sessionId,
+    });
+    expect(status).toBe(200);
+    const response = data as {
+      status: string;
+      extractionMode?: string;
+      error?: string;
+    };
+    expect(response.status).toBe('idle');
+    expect(response.extractionMode).toBe('default');
+    expect(response.error).toBeUndefined();
+  });
+
+  it('reports a missing API key when switching to progress-tree mode', async () => {
+    const watch = await fetchJson(port, 'POST', '/watch', {
       projectPath: '/tmp',
-      sessionId: 'sess-no-key',
+      sessionId: 'sess-no-key-progress',
+    });
+    expect(watch.status).toBe(200);
+
+    const { status, data } = await fetchJson(port, 'POST', '/mode', {
+      sessionId: 'sess-no-key-progress',
+      mode: 'progress-tree',
     });
     expect(status).toBe(200);
     const response = data as { status: string; error?: string };

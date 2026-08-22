@@ -116,6 +116,7 @@ describe('ProgressServer Codex sessions', () => {
       sessionId: 'codex-cloud',
     });
     expect(watch.status).toBe(200);
+    expect(watch.data.extractionMode).toBe('default');
     await wait(400);
 
     const turn = await fetchJson(
@@ -189,5 +190,21 @@ describe('ProgressServer Codex sessions', () => {
       mode: 'full',
       parseScope: 'full_file',
     });
+  });
+
+  it('switches and reports extraction mode', async () => {
+    const changed = await fetchJson(port, 'POST', '/mode', {
+      sessionId: 'codex-cloud',
+      mode: 'progress-tree',
+    });
+    expect(changed.status).toBe(200);
+    expect(changed.data.extractionMode).toBe('progress-tree');
+
+    const reverted = await fetchJson(port, 'POST', '/mode', {
+      sessionId: 'codex-cloud',
+      mode: 'default',
+    });
+    expect(reverted.status).toBe(200);
+    expect(reverted.data.extractionMode).toBe('default');
   });
 });

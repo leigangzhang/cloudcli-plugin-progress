@@ -1,5 +1,10 @@
 import type { PluginAPI } from './types.js';
-import type { ProgressResponse, ProgressTree, TurnResponse } from './core/types.js';
+import type {
+  ExtractionMode,
+  ProgressResponse,
+  ProgressTree,
+  TurnResponse,
+} from './core/types.js';
 import { isProgressResponse, parseJsonLine } from './core/protocol.js';
 import { renderEmpty, renderError, renderLoading } from './ui/error.js';
 import { refreshIcon } from './ui/icons.js';
@@ -55,6 +60,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
   let tree: ProgressTree = { version: 0, goals: [] };
   let status: ProgressResponse['status'] = 'idle';
+  let extractionMode: ExtractionMode = 'default';
   let errorMessage: string | undefined;
   let expanded = new Set<string>();
   let turnExpanded = new Set<string>();
@@ -93,12 +99,23 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     const refreshDisabled = isRefreshing ? 'opacity:0.6;cursor:not-allowed;' : '';
     const refreshHover = isRefreshing ? '' : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
     const iconClass = isRefreshing ? 'pp-spin' : '';
+    const modeControl = `
+      <div class="pp-mode-control" style="display:inline-flex;border:1px solid ${colors.border};border-radius:4px;overflow:hidden;">
+        ${(['default', 'progress-tree'] as ExtractionMode[]).map((mode) => {
+          const active = mode === extractionMode;
+          return `<button data-mode="${mode}" style="border:0;padding:4px 9px;font-size:0.68rem;background:${active ? colors.surface : colors.dim};color:${colors.text};cursor:pointer;">${mode === 'default' ? 'Default' : 'ProgressTree'}</button>`;
+        }).join('')}
+      </div>
+    `;
     const header = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
-        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
-          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
-        </button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          ${modeControl}
+          <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+            <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
+          </button>
+        </div>
       </div>
     `;
 
@@ -137,6 +154,12 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     const refreshBtn = root.querySelector('#pp-refresh');
     refreshBtn?.addEventListener('click', () => void refresh());
+    root.querySelectorAll('[data-mode]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const mode = (el as HTMLElement).dataset.mode as ExtractionMode;
+        if (mode !== extractionMode) void setMode(mode);
+      });
+    });
   }
 
   async function toggleStep(el: HTMLElement): Promise<void> {
@@ -169,6 +192,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     if (isProgressResponse(res)) {
       tree = res.tree;
       status = res.status;
+      extractionMode = res.extractionMode ?? 'default';
       errorMessage = res.error;
       return;
     }
@@ -256,6 +280,19 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
       isRefreshing = false;
       render();
     }
+  }
+
+  async function setMode(mode: ExtractionMode): Promise<void> {
+    const sid = currentRealSessionId ?? currentSessionId;
+    if (!sid || mode === extractionMode) return;
+    try {
+      const res = await api.rpc('POST', '/mode', { sessionId: sid, mode });
+      applyResponse(res);
+    } catch (err) {
+      status = 'error';
+      errorMessage = (err as Error).message;
+    }
+    render();
   }
 
   currentProjectPath = api.context.project?.path ?? null;

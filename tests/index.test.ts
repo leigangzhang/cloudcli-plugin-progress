@@ -85,6 +85,8 @@ describe('mount/unmount', () => {
 
     expect(rpc).toHaveBeenCalledWith('POST', '/watch', { projectPath: '/test', sessionId: 's1' });
     expect(container.innerHTML).toContain('Progress');
+    expect(container.innerHTML).toContain('Default');
+    expect(container.innerHTML).toContain('ProgressTree');
   });
 
   it('unmount calls cleanup', () => {

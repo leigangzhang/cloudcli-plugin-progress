@@ -2,32 +2,27 @@ import Anthropic from '@anthropic-ai/sdk';
 import { validateProgressTree } from './schema.js';
 import { estimateTokens, measureConversationTurns, } from './trace.js';
 const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
-const SYSTEM_PROMPT = `You are a session progress extractor. Your job is to analyze conversation turns and produce a two-level progress tree.
+const ASSISTANT_SUMMARY_LIMIT = 500;
+const USER_TEXT_LIMIT = 2000;
+const SYSTEM_PROMPT = `You are a session progress updater. Your job is to apply new conversation turns to an existing progress tree.
+
+Return a ProgressTreePatch object only:
+{
+  "version": <next integer version>,
+  "upsertGoals": [only affected goal objects],
+  "deleteGoalIds": [],
+  "deleteStepIds": []
+}
 
 Rules:
-1. Top-level nodes (goals) are high-level discussion topics or objectives identified across the conversation.
-2. Every second-level node (step) must represent exactly one conversation turn. Use the turn's promptId as the step's promptId.
-3. Do not merge multiple turns into a single step. If the same topic is discussed across multiple turns, create a separate step for each turn under the same goal.
-4. Keep existing goal/step IDs stable when they still match the conversation. Only add new goals/steps, update status, or mark nodes completed based on the turns.
-5. Mark a goal or step as completed only when the turn clearly indicates completion.
-6. Use one short, clear sentence for each subject and one short, clear sentence for each description. Do not restate the turn text.
-7. Infer progress only from the user's question in each turn. Assistant replies, internal reasoning, tool calls, and tool output are intentionally omitted from the input.
-8. Detect the dominant language used by the user across the turns and generate the progress tree in that same language. Prefer the user's language over the assistant's.
-9. Every goal and every step must include a non-empty string "id". Preserve IDs from the current tree where possible; when a node is new, create a stable unique ID from its subject and promptId.
-10. Every step must include the exact promptId of the conversation turn it represents.
-11. Your response must start with the character "{". Output ONLY valid JSON matching the ProgressTree schema. Do not output reasoning, explanations, markdown fences, or any text before or after the JSON.`;
-function buildPrompt(tree, turns, strict = false) {
-    const base = `Current Progress Tree:
-${JSON.stringify(tree, null, 2)}
-
-Conversation Turns:
-${JSON.stringify(turns, null, 2)}`;
-    if (strict) {
-        return (base +
-            '\n\nIMPORTANT: Your previous output was invalid. This time the response must start with "{" and contain only raw JSON. No markdown, no reasoning, no explanation, and no trailing text. Every goal and step must have a non-empty "id"; every step must also have the exact "promptId" from its conversation turn.');
-    }
-    return base;
-}
+1. Do not return the full progress tree. Return only goals and steps affected by the supplied turns.
+2. Each upsert goal must contain its stable "id". Include affected steps only; unchanged steps may be omitted.
+3. Every new or updated step must contain a non-empty "id", exact "promptId", "subject", "description", and "status".
+4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
+5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
+6. Use one short, clear sentence for each subject and description. Do not restate the turn text.
+7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
+8. Your response must start with the character "{". Output ONLY valid JSON. Do not output reasoning, explanations, markdown fences, or text before or after the JSON.`;
 function isObject(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -50,6 +45,62 @@ function uniqueId(base, used) {
     }
     used.add(candidate);
     return candidate;
+}
+function truncateText(value, maxLength) {
+    if (!value)
+        return undefined;
+    if (value.length <= maxLength)
+        return value;
+    return `${value.slice(0, maxLength)}\n...[truncated]`;
+}
+function buildTreeDigest(tree) {
+    return tree.goals.map((goal) => ({
+        id: goal.id,
+        subject: truncateText(goal.subject, 120) ?? goal.subject,
+        status: goal.status,
+        steps: (goal.steps ?? []).map((step) => ({
+            id: step.id,
+            promptId: step.promptId,
+            status: step.status,
+        })),
+    }));
+}
+function buildTurnInput(turn) {
+    return {
+        promptId: turn.promptId,
+        lineStart: turn.lineStart,
+        lineEnd: turn.lineEnd,
+        timestamp: turn.timestamp,
+        userText: truncateText(turn.userText, USER_TEXT_LIMIT),
+        assistantSummary: truncateText(turn.assistantText, ASSISTANT_SUMMARY_LIMIT),
+    };
+}
+function buildPrompt(tree, turns) {
+    return `Current Tree Digest:
+${JSON.stringify(buildTreeDigest(tree), null, 2)}
+
+Conversation Turns:
+${JSON.stringify(turns, null, 2)}`;
+}
+function chunkTurns(turns, size) {
+    const chunks = [];
+    for (let i = 0; i < turns.length; i += size) {
+        chunks.push(turns.slice(i, i + size));
+    }
+    return chunks;
+}
+function usageTrace(usage) {
+    const trace = {
+        inputTokens: usage?.input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+    };
+    if (usage?.cache_creation_input_tokens !== undefined) {
+        trace.cacheCreationInputTokens = usage.cache_creation_input_tokens;
+    }
+    if (usage?.cache_read_input_tokens !== undefined) {
+        trace.cacheReadInputTokens = usage.cache_read_input_tokens;
+    }
+    return trace;
 }
 function previousGoalForCandidate(goal, previous) {
     const stepPromptIds = new Set();
@@ -89,66 +140,107 @@ function previousStepByPromptId(previous) {
     }
     return steps;
 }
-/**
- * LLMs occasionally return `""` for ids despite the prompt requiring them.
- * Repair those values before schema validation so an otherwise usable tree is
- * not discarded. Existing nodes are matched through promptId; new nodes get a
- * deterministic fallback id that remains stable across incremental extracts.
- */
-function repairProgressTreeIds(parsed, previous) {
-    if (!isObject(parsed) || !Array.isArray(parsed.goals)) {
-        return parsed;
-    }
+function repairPatchIds(patch, previous) {
     const previousGoalsById = new Map(previous.goals.map((goal) => [goal.id, goal]));
     const previousSteps = previousStepByPromptId(previous);
     const usedGoalIds = new Set();
     const usedStepIds = new Set();
-    const goals = parsed.goals.map((goal) => {
-        if (!isObject(goal))
-            return goal;
-        const suppliedId = nonEmptyString(goal.id);
-        const previousGoal = suppliedId
-            ? previousGoalsById.get(suppliedId)
+    const upsertGoals = patch.upsertGoals.map((goal) => {
+        const suppliedGoalId = nonEmptyString(goal.id);
+        const previousGoal = suppliedGoalId
+            ? previousGoalsById.get(suppliedGoalId)
             : previousGoalForCandidate(goal, previous);
-        let goalId;
-        if (suppliedId && !usedGoalIds.has(suppliedId)) {
-            usedGoalIds.add(suppliedId);
-            goalId = suppliedId;
+        const goalId = suppliedGoalId && !usedGoalIds.has(suppliedGoalId)
+            ? suppliedGoalId
+            : uniqueId(previousGoal?.id ?? `goal-${stableHash(goal.subject ?? 'unknown-goal')}`, usedGoalIds);
+        if (suppliedGoalId && usedGoalIds.has(suppliedGoalId)) {
+            usedGoalIds.add(goalId);
         }
         else {
-            goalId = uniqueId(previousGoal?.id ??
-                `goal-${stableHash(nonEmptyString(goal.subject) ?? 'unknown-goal')}`, usedGoalIds);
+            usedGoalIds.add(suppliedGoalId ?? goalId);
         }
-        const steps = Array.isArray(goal.steps)
-            ? goal.steps.map((step, index) => {
-                if (!isObject(step))
-                    return step;
-                const suppliedStepId = nonEmptyString(step.id);
-                const promptId = nonEmptyString(step.promptId);
-                const previousStep = promptId ? previousSteps.get(promptId) : undefined;
-                let stepId;
-                if (suppliedStepId && !usedStepIds.has(suppliedStepId)) {
-                    usedStepIds.add(suppliedStepId);
-                    stepId = suppliedStepId;
-                }
-                else {
-                    stepId = uniqueId(previousStep?.id ?? `step-${stableHash(promptId ?? `${goalId}:${index}`)}`, usedStepIds);
-                }
-                return { ...step, id: stepId };
-            })
-            : undefined;
+        const steps = goal.steps?.map((step, index) => {
+            const suppliedStepId = nonEmptyString(step.id);
+            const previousStep = previousSteps.get(step.promptId);
+            const stepId = suppliedStepId && !usedStepIds.has(suppliedStepId)
+                ? suppliedStepId
+                : uniqueId(previousStep?.id ?? `step-${stableHash(step.promptId || `${goalId}:${index}`)}`, usedStepIds);
+            usedStepIds.add(stepId);
+            return { ...step, id: stepId };
+        });
         return { ...goal, id: goalId, ...(steps ? { steps } : {}) };
     });
-    return { ...parsed, goals: goals };
+    return { ...patch, upsertGoals };
+}
+function validatePatch(patch) {
+    const errors = [];
+    if (!Number.isInteger(patch.version) || patch.version < 0) {
+        errors.push('patch.version must be a non-negative integer');
+    }
+    if (!Array.isArray(patch.upsertGoals)) {
+        errors.push('patch.upsertGoals must be an array');
+    }
+    if (!Array.isArray(patch.deleteGoalIds)) {
+        errors.push('patch.deleteGoalIds must be an array');
+    }
+    if (!Array.isArray(patch.deleteStepIds)) {
+        errors.push('patch.deleteStepIds must be an array');
+    }
+    if (errors.length > 0)
+        return errors;
+    const treeErrors = validateProgressTree({
+        version: patch.version,
+        goals: patch.upsertGoals,
+    });
+    if (treeErrors.length > 0) {
+        errors.push(...treeErrors.map((error) => `patch: ${error}`));
+    }
+    return errors;
+}
+function mergePatch(previous, patch) {
+    const deletedGoalIds = new Set(patch.deleteGoalIds);
+    const deletedStepIds = new Set(patch.deleteStepIds);
+    const goals = new Map();
+    for (const goal of previous.goals) {
+        if (!deletedGoalIds.has(goal.id)) {
+            goals.set(goal.id, goal);
+        }
+    }
+    for (const incoming of patch.upsertGoals) {
+        const existing = goals.get(incoming.id);
+        const existingSteps = existing?.steps ?? [];
+        const mergedSteps = incoming.steps === undefined
+            ? existingSteps
+            : (() => {
+                const stepMap = new Map();
+                for (const step of existingSteps) {
+                    stepMap.set(step.id, step);
+                }
+                for (const step of incoming.steps) {
+                    stepMap.set(step.id, step);
+                }
+                for (const id of deletedStepIds) {
+                    stepMap.delete(id);
+                }
+                return Array.from(stepMap.values());
+            })();
+        goals.set(incoming.id, {
+            ...existing,
+            ...incoming,
+            steps: mergedSteps,
+        });
+    }
+    const version = patch.version > previous.version ? patch.version : previous.version + 1;
+    return {
+        version,
+        goals: Array.from(goals.values()),
+    };
 }
 function extractJsonObject(text) {
     const start = text.indexOf('{');
     if (start === -1) {
         throw new Error('No JSON object found in response');
     }
-    // Find the outermost balanced JSON object instead of relying on the first
-    // and last braces. This handles responses that contain multiple objects or
-    // trailing text after the main object.
     let depth = 0;
     let inString = false;
     let escaped = false;
@@ -172,53 +264,15 @@ function extractJsonObject(text) {
             depth++;
         else if (char === '}') {
             depth--;
-            if (depth === 0) {
+            if (depth === 0)
                 return text.slice(start, i + 1);
-            }
         }
     }
-    // Fallback to the old heuristic if no balanced object was found.
     const end = text.lastIndexOf('}');
     if (end === -1 || end < start) {
         throw new Error('No JSON object found in response');
     }
     return text.slice(start, end + 1);
-}
-export function summarizeTurns(turns, turnLimit = 5, maxFieldLength = 2000) {
-    return turns.slice(-turnLimit).map((turn) => ({
-        promptId: turn.promptId,
-        lineStart: turn.lineStart,
-        lineEnd: turn.lineEnd,
-        timestamp: turn.timestamp,
-        userText: truncateText(turn.userText, maxFieldLength),
-    }));
-}
-function truncateText(text, maxLength) {
-    if (!text)
-        return undefined;
-    if (text.length <= maxLength)
-        return text;
-    return text.slice(0, maxLength) + '\n...[truncated]';
-}
-function chunkTurns(turns, size) {
-    const chunks = [];
-    for (let i = 0; i < turns.length; i += size) {
-        chunks.push(turns.slice(i, i + size));
-    }
-    return chunks;
-}
-function usageTrace(usage) {
-    const trace = {
-        inputTokens: usage?.input_tokens ?? 0,
-        outputTokens: usage?.output_tokens ?? 0,
-    };
-    if (usage?.cache_creation_input_tokens !== undefined) {
-        trace.cacheCreationInputTokens = usage.cache_creation_input_tokens;
-    }
-    if (usage?.cache_read_input_tokens !== undefined) {
-        trace.cacheReadInputTokens = usage.cache_read_input_tokens;
-    }
-    return trace;
 }
 export class LLMExtractionEngineImpl {
     constructor(options) {
@@ -246,19 +300,11 @@ export class LLMExtractionEngineImpl {
             });
         }
         if (turns.length === 0) {
-            return this.extractChunk(tree, turns, traceContext);
+            return this.extractChunk(tree, [], traceContext);
         }
-        return this.extractByPolling(tree, turns, onProgress, traceContext);
-    }
-    async extractChunk(tree, turns, traceContext) {
-        return await this.doExtract(tree, summarizeTurns(turns, 5), false, traceContext, 1);
-    }
-    async extractByPolling(tree, turns, onProgress, traceContext) {
-        const chunkSize = 5;
-        const chunks = chunkTurns(turns, chunkSize);
+        const chunks = chunkTurns(turns, 5);
         let currentTree = tree;
         for (let index = 0; index < chunks.length; index++) {
-            const chunk = chunks[index];
             const chunkContext = traceContext
                 ? {
                     ...traceContext,
@@ -266,28 +312,30 @@ export class LLMExtractionEngineImpl {
                     chunkTotal: chunks.length,
                 }
                 : undefined;
-            currentTree = await this.extractChunk(currentTree, chunk, chunkContext);
+            currentTree = await this.extractChunk(currentTree, chunks[index], chunkContext);
             onProgress?.(currentTree);
         }
         return currentTree;
+    }
+    async extractChunk(tree, turns, traceContext) {
+        return this.doExtract(tree, turns.map(buildTurnInput), traceContext, 1);
     }
     onUsage(callback) {
         this.usageListeners.push(callback);
         return () => {
             const idx = this.usageListeners.indexOf(callback);
-            if (idx !== -1) {
+            if (idx !== -1)
                 this.usageListeners.splice(idx, 1);
-            }
         };
     }
-    async doExtract(tree, turns, strict, traceContext, attempt = 1) {
-        const prompt = buildPrompt(tree, turns, strict);
+    async doExtract(tree, turns, traceContext, attempt = 1) {
+        const prompt = buildPrompt(tree, turns);
         if (traceContext && this.trace) {
             this.trace({
                 type: 'prompt',
                 context: traceContext,
                 attempt,
-                strict,
+                strict: false,
                 turnWindow: turns.length,
                 promptCharacters: prompt.length,
                 estimatedPromptTokens: estimateTokens(prompt),
@@ -295,6 +343,7 @@ export class LLMExtractionEngineImpl {
             });
         }
         const maxTokens = Math.min(this.config.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS);
+        let rawOutput = '';
         try {
             const response = await this.client.messages.create({
                 model: this.config.model,
@@ -303,6 +352,7 @@ export class LLMExtractionEngineImpl {
                 messages: [{ role: 'user', content: prompt }],
             });
             const usage = response.usage;
+            const outputTokens = usage?.output_tokens ?? 0;
             if (traceContext && this.trace) {
                 this.trace({
                     type: 'usage',
@@ -313,22 +363,47 @@ export class LLMExtractionEngineImpl {
             }
             this.usageListeners.forEach((cb) => cb({
                 inputTokens: usage?.input_tokens ?? 0,
-                outputTokens: usage?.output_tokens ?? 0,
+                outputTokens,
             }));
-            const text = response.content
+            rawOutput = response.content
                 .map((block) => (block.type === 'text' ? block.text : ''))
                 .join('');
-            const jsonText = extractJsonObject(text);
-            const parsed = repairProgressTreeIds(JSON.parse(jsonText), tree);
-            const errors = validateProgressTree(parsed);
-            if (errors.length > 0) {
-                throw new Error('Schema validation failed: ' + errors.join('; '));
+            const jsonText = extractJsonObject(rawOutput);
+            const parsedPatch = JSON.parse(jsonText);
+            if (!isObject(parsedPatch) || !Array.isArray(parsedPatch.upsertGoals)) {
+                throw new Error('Model response must contain patch.upsertGoals');
             }
-            return parsed;
+            const patch = repairPatchIds(parsedPatch, tree);
+            const errors = validatePatch(patch);
+            if (errors.length > 0) {
+                throw new Error(`Schema validation failed: ${errors.join('; ')}`);
+            }
+            if (traceContext && this.trace) {
+                this.trace({
+                    type: 'response',
+                    context: traceContext,
+                    attempt,
+                    rawOutput,
+                    outputCharacters: rawOutput.length,
+                    parsedCharacters: jsonText.length,
+                    outputTokens,
+                });
+            }
+            return mergePatch(tree, patch);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             if (traceContext && this.trace) {
+                this.trace({
+                    type: 'response',
+                    context: traceContext,
+                    attempt,
+                    rawOutput,
+                    outputCharacters: rawOutput.length,
+                    parsedCharacters: 0,
+                    outputTokens: 0,
+                    error: message,
+                });
                 this.trace({
                     type: 'usage',
                     context: traceContext,

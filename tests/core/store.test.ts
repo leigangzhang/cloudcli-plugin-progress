@@ -21,6 +21,7 @@
    it('returns the current state', () => {
      const store = new ProgressStoreImpl();
      expect(store.getState()).toEqual({ version: 0, goals: [] });
+     expect(store.getExtractionMode()).toBe('default');
    });
 
    it('notifies subscribers on state change', () => {
@@ -54,6 +55,32 @@
      const loaded = other.loadSnapshot('sess-1');
      expect(loaded).toBe(true);
      expect(other.getState()).toEqual(tree);
+     expect(other.getExtractionMode()).toBe('default');
+     tmp.cleanup();
+   });
+
+   it('persists extraction mode in versioned snapshots', () => {
+     const tmp = createTempDir();
+     const store = new ProgressStoreImpl({ snapshotDir: tmp.path });
+     store.setState({ version: 1, goals: [] });
+     store.setExtractionMode('progress-tree');
+     store.saveSnapshot('mode-session');
+
+     const other = new ProgressStoreImpl({ snapshotDir: tmp.path });
+     expect(other.loadSnapshot('mode-session')).toBe(true);
+     expect(other.getExtractionMode()).toBe('progress-tree');
+     tmp.cleanup();
+   });
+
+   it('loads legacy tree snapshots as progress-tree mode', () => {
+     const tmp = createTempDir();
+     const tree: ProgressTree = { version: 1, goals: [] };
+     fs.writeFileSync(path.join(tmp.path, 'legacy.json'), JSON.stringify(tree), 'utf-8');
+
+     const store = new ProgressStoreImpl({ snapshotDir: tmp.path });
+     expect(store.loadSnapshot('legacy')).toBe(true);
+     expect(store.getState()).toEqual(tree);
+     expect(store.getExtractionMode()).toBe('progress-tree');
      tmp.cleanup();
    });
 
