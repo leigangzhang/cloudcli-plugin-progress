@@ -109,7 +109,11 @@ describe('ProgressServer end-to-end', () => {
     await wait(400);
     expect(mockExtractor.extract).toHaveBeenCalled();
 
-    const { data: progressData } = await fetchJson(port, 'GET', '/progress');
+    const { data: progressData } = await fetchJson(
+      port,
+      'GET',
+      `/progress?sessionId=${encodeURIComponent(sessionId)}`,
+    );
     const progress = progressData as { tree: ProgressTree; status: string };
     expect(progress.status).toBe('idle');
     expect(progress.tree.goals).toHaveLength(1);
@@ -143,8 +147,15 @@ describe('ProgressServer end-to-end', () => {
     messages.length = 0;
     appendJsonl(logFile, [
       {
+        type: 'user',
+        uuid: 'u2',
+        promptId: 'p2',
+        content: [{ type: 'text', text: 'Update progress' }],
+      },
+      {
         type: 'assistant',
         uuid: 'a2',
+        parentUuid: 'u2',
         promptId: 'p2',
         content: [{ type: 'thinking', thinking: 'Plan updated.' }],
         stopReason: 'end_turn',
@@ -170,7 +181,11 @@ describe('ProgressServer end-to-end', () => {
     writeJsonl(logFile, [{ type: 'system', uuid: 's0' }]);
 
     await fetchJson(port, 'POST', '/watch', { projectPath, sessionId });
-    const before = await fetchJson(port, 'GET', '/progress');
+    const before = await fetchJson(
+      port,
+      'GET',
+      `/progress?sessionId=${encodeURIComponent(sessionId)}`,
+    );
     expect((before.data as { tree: { goals: unknown[] } }).tree.goals).toEqual([]);
 
     appendJsonl(logFile, [
@@ -178,7 +193,7 @@ describe('ProgressServer end-to-end', () => {
     ]);
     await wait(50);
 
-    const after = await fetchJson(port, 'POST', '/refresh');
+    const after = await fetchJson(port, 'POST', '/refresh', { sessionId });
     expect(after.status).toBe(200);
     expect((after.data as { tree: { goals: unknown[] } }).tree.goals).toHaveLength(1);
   });

@@ -7,8 +7,14 @@ import { buildCodexTurnsFromLog } from './core/codex/parser.js';
 import { loadConfig, redactApiKey } from './core/config.js';
 import { DiffDetectorImpl } from './core/diff-detector.js';
 import { LLMExtractionEngineImpl } from './core/extractor.js';
-import { isRefreshRequest, isWatchRequest, parseJsonLine } from './core/protocol.js';
+import {
+  isModeRequest,
+  isRefreshRequest,
+  isWatchRequest,
+  parseJsonLine,
+} from './core/protocol.js';
 import { resolveSessionLogPath } from './core/paths.js';
+import { RuleBasedExtractionEngine } from './core/rule-extractor.js';
 import { ProgressStoreImpl } from './core/store.js';
 import { buildTurnsFromLog } from './core/turns.js';
 import { FileLogWatcher } from './core/watcher.js';
@@ -21,6 +27,7 @@ import {
 } from './core/trace.js';
 import type {
   ConversationTurn,
+  ExtractionMode,
   LLMConfig,
   LLMExtractionEngine,
   LogEntry,
@@ -50,6 +57,7 @@ interface SessionState {
   buffer: ConversationBuffer;
   detector: DiffDetectorImpl;
   store: ProgressStoreImpl;
+  extractionMode: ExtractionMode;
   extractor?: LLMExtractionEngine;
   status: ProgressResponse['status'];
   errorMessage?: string;
@@ -76,13 +84,14 @@ export class ProgressServer {
   private cloudcliToReal = new Map<string, string>();
   private config: LLMConfig;
   private options: ProgressServerOptions;
+  private ruleExtractor = new RuleBasedExtractionEngine();
 
   constructor(options: ProgressServerOptions = {}) {
     this.options = options;
     try {
       this.config = options.config ?? loadConfig();
     } catch (err) {
-      this.config = { apiKey: '', model: 'unknown' };
+      this.config = { apiKey: '', model: 'unknown', extractionMode: 'default' };
     }
   }
 
@@ -127,10 +136,23 @@ export class ProgressServer {
   }
 
   private chooseExtractor(session: SessionState): LLMExtractionEngine | undefined {
+    if (this.options.extractor) return this.options.extractor;
+    if (session.extractionMode === 'default') return this.ruleExtractor;
     return session.extractor ?? this.extractor;
   }
 
   private createSessionExtractor(session: SessionState): void {
+    session.extractor = undefined;
+    if (session.extractionMode === 'default') return;
+    if (this.options.config) {
+      if (this.options.config.apiKey) {
+        session.extractor = new LLMExtractionEngineImpl({
+          config: this.options.config,
+          trace: (event) => this.traceExtraction(event),
+        });
+      }
+      return;
+    }
     try {
       const sessionConfig = loadConfig({ projectPath: session.projectPath });
       session.extractor = new LLMExtractionEngineImpl({
@@ -293,7 +315,10 @@ export class ProgressServer {
     }
 
     const buffer = new ConversationBuffer();
-    const store = new ProgressStoreImpl({ snapshotDir: this.options.snapshotDir });
+    const store = new ProgressStoreImpl({
+      snapshotDir: this.options.snapshotDir,
+      extractionMode: this.config.extractionMode ?? 'default',
+    });
     const detector = new DiffDetectorImpl(buffer, {
       ...this.options.detectorOptions,
       provider: resolved.provider,
@@ -309,9 +334,14 @@ export class ProgressServer {
       buffer,
       detector,
       store,
+      extractionMode: store.getExtractionMode(),
       status: 'idle',
     };
 
+    if (!store.loadSnapshot(realSessionId)) {
+      store.setState({ version: 0, goals: [] });
+    }
+    session.extractionMode = store.getExtractionMode();
     this.createSessionExtractor(session);
     this.bindDetector(session);
     session.store.subscribe((tree) =>
@@ -332,20 +362,14 @@ export class ProgressServer {
       session!.detector.ingest(entry);
     });
 
-    if (!store.loadSnapshot(realSessionId)) {
-      store.setState({ version: 0, goals: [] });
-    }
-
     await watcher.startWithPath(resolved.logPath);
     const logPath = watcher.getFilePath();
     if (!logPath || !fs.existsSync(logPath)) {
-      this.setStatus(
-        realSessionId,
-        'error',
-        `Session log not found: ${logPath || realSessionId}`,
-      );
+      session.status = 'error';
+      session.errorMessage = `Session log not found: ${logPath || realSessionId}`;
     } else {
-      this.setStatus(realSessionId, 'idle');
+      session.status = 'idle';
+      session.errorMessage = undefined;
     }
 
     this.sessions.set(realSessionId, session);
@@ -378,6 +402,10 @@ export class ProgressServer {
       }
       if (req.method === 'GET' && url.pathname === '/progress') {
         this.handleProgress(res, url);
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/mode') {
+        await this.handleMode(req, res);
         return;
       }
       if (req.method === 'POST' && url.pathname === '/refresh') {
@@ -415,7 +443,10 @@ export class ProgressServer {
       return;
     }
     const session = await this.getOrCreateSession(body.sessionId, body.projectPath);
-    if (!this.chooseExtractor(session)) {
+    if (
+      session.extractionMode === 'progress-tree' &&
+      !this.chooseExtractor(session)
+    ) {
       this.setStatus(
         session.sessionId,
         'error',
@@ -441,6 +472,50 @@ export class ProgressServer {
       res.end(JSON.stringify({ error: 'Session not found' }));
       return;
     }
+    const response = this.buildProgressResponse(session);
+    res.writeHead(200);
+    res.end(JSON.stringify(response));
+  }
+
+  private async handleMode(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): Promise<void> {
+    const body = parseJsonLine(await readBody(req));
+    if (!isModeRequest(body)) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'Invalid mode request' }));
+      return;
+    }
+    const sessionId = this.resolveSessionId(body.sessionId) ?? body.sessionId;
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      res.writeHead(404);
+      res.end(JSON.stringify({ error: 'Session not found' }));
+      return;
+    }
+
+    session.extractionMode = body.mode;
+    session.store.setExtractionMode(body.mode);
+    this.createSessionExtractor(session);
+    try {
+      session.store.saveSnapshot(sessionId);
+    } catch (err) {
+      console.error('Failed to save snapshot:', (err as Error).message);
+    }
+    if (
+      body.mode === 'progress-tree' &&
+      !this.chooseExtractor(session)
+    ) {
+      this.setStatus(
+        sessionId,
+        'error',
+        'Missing API key. Set ANTHROPIC_API_KEY in project .env or plugin environment.',
+      );
+    } else {
+      this.setStatus(sessionId, 'idle');
+    }
+
     const response = this.buildProgressResponse(session);
     res.writeHead(200);
     res.end(JSON.stringify(response));
@@ -551,6 +626,7 @@ export class ProgressServer {
         requestedSessionId: session.cloudcliSessionId,
         sessionId: session.sessionId,
         provider: session.provider,
+        extractionMode: session.extractionMode,
         logPath,
         logExists: logPath ? fs.existsSync(logPath) : false,
         apiKeyConfigured: !!(extractor || this.config.apiKey),
@@ -568,6 +644,7 @@ export class ProgressServer {
     return {
       tree: session.store.getState(),
       status: session.status,
+      extractionMode: session.extractionMode,
       error: session.errorMessage,
       sessionId: session.sessionId,
     };

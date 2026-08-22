@@ -11,10 +11,10 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
   - **Step**: one conversation turn. Click a step to expand the original user question, model reasoning, and assistant reply.
 - **Local conversation records** — Step details are read from the local `.jsonl` file and rendered as Markdown. No raw conversation text is returned by the LLM.
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
-- **LLM-powered extraction** — Calls the configured LLM to turn conversation turns into a structured progress tree. Only each turn's user question is sent to the LLM; assistant replies, reasoning, and tool output are not submitted. Output follows the dominant user language and keeps subjects and descriptions concise.
+- **Default query extraction** — Default mode extracts user queries locally without calling an LLM. Each new query is appended to the progress tree with zero input or output token cost.
+- **ProgressTree extraction** — Optional LLM mode uses a compact tree digest plus user text and a short assistant summary to update only affected nodes through a local patch merge.
 - **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
-- **Five-turn polling** — Sessions are processed in 5-turn chunks. Incremental triggers only send turns that do not yet have a progress step, so old conversation turns are not repeatedly sent to the LLM.
-- **Large-session fallback** — If the model returns empty or malformed JSON, the plugin truncates each turn and retries with only the last 5 turns.
+- **Five-turn polling** — ProgressTree sessions are processed in 5-turn chunks. Incremental triggers only send turns that do not yet have a progress step.
 - **Codex rollout parsing** — Codex turns are grouped by `turn_id`, including user messages, summarized reasoning, assistant output, and tool calls. V1 tracks the mapped root thread; spawned subagent rollouts are not merged automatically.
 - **WebSocket live updates** — Progress and status changes are pushed to the UI without polling.
 - **Dark / light theme** — Adapts to the CloudCLI theme automatically.
@@ -45,12 +45,13 @@ Configuration is read in the following priority order:
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | Yes | LLM API key. Also accepts `ANTHROPIC_AUTH_TOKEN` or `API_KEY`. |
+| `ANTHROPIC_API_KEY` | ProgressTree only | LLM API key. Also accepts `ANTHROPIC_AUTH_TOKEN` or `API_KEY`. |
 | `ANTHROPIC_BASE_URL` | No | Custom API base URL. Also accepts `BASE_URL`. |
 | `PROGRESS_MODEL` / `ANTHROPIC_MODEL` / `MODEL` | No | Extraction model. Defaults to `claude-3-5-sonnet-20241022`. |
 | `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to and is capped at `4096`. |
 | `TIMEOUT_MS` / `PROGRESS_TIMEOUT_MS` / `ANTHROPIC_TIMEOUT_MS` | No | LLM request timeout in milliseconds. Defaults to `60000`. |
 | `PROGRESS_USE_POLLING` | No | Deprecated compatibility flag. All extractions now use 5-turn chunks. |
+| `PROGRESS_EXTRACTION_MODE` | No | `default` or `progress-tree`. Defaults to `default`. |
 | `PROGRESS_TRACE_EXTRACTIONS` | No | Log full Codex conversation text, final prompts, and token usage as JSON lines. Defaults to `false`. |
 | `PROGRESS_TRACE_LOG_DIR` | No | Trace log directory. Defaults to `~/.claude-code-ui/plugins/cloudcli-plugin-progress`. |
 | `PROGRESS_TRACE_LOG_FILE` | No | Trace log filename. Defaults to `progress-plugin.log`. |
@@ -64,6 +65,7 @@ ANTHROPIC_MODEL=deepseek-v4-flash
 MAX_TOKENS=8192
 TIMEOUT_MS=120000
 PROGRESS_USE_POLLING=true
+PROGRESS_EXTRACTION_MODE=progress-tree
 ```
 
 ## Development
@@ -86,7 +88,9 @@ npm run dev
 
 1. Open CloudCLI and start a session.
 2. Click the **Progress** tab.
-3. The plugin watches the current session log and shows:
+3. Default mode shows locally extracted user queries without requiring an API key.
+4. Switch to **ProgressTree** to enable LLM extraction for the current session.
+5. The plugin watches the current session log and shows:
    - **Goals**: topics or objectives inferred from the conversation.
    - **Steps**: one step per conversation turn. The step subject is a one-sentence summary of that turn.
 4. Click a Goal header to expand or collapse its steps.
@@ -116,7 +120,8 @@ While a refresh is running the Refresh button is disabled and shows **Refreshing
 - **Buffer**: aggregates recent log entries.
 - **TurnBuilder**: groups log entries by `promptId` into complete user-question → assistant-reply turns.
 - **Diff Detector**: triggers extraction when assistant thinking, tool use, or stop reason entries appear.
-- **LLM Extractor**: sends the current progress tree and recent turns to the LLM, returning an updated tree.
+- **Rule Extractor**: locally converts pending user queries into progress steps.
+- **LLM Extractor**: sends a compact tree digest and affected turns, then merges the returned node patch locally.
 - **Store**: holds current progress and persists a snapshot after every update.
 - **Server**: HTTP + WebSocket backend; all state is isolated by `sessionId`.
 - **UI**: vanilla DOM tab page with Markdown rendering for turn records.
@@ -130,6 +135,7 @@ The plugin listens on a random local port; CloudCLI proxies `/api/plugins/progre
 | `GET` | `/health` | Health check. Returns `{ status, model }`. |
 | `POST` | `/watch` | Start or reuse a session watcher. Body: `{ projectPath, sessionId }`. |
 | `GET` | `/progress?sessionId=...` | Return the current `ProgressTree` for the session. |
+| `POST` | `/mode` | Set the active extraction mode. Body: `{ sessionId, mode: "default" | "progress-tree" }`. |
 | `POST` | `/refresh` | Force re-extraction. Body: `{ sessionId }`. With polling enabled, intermediate progress is broadcast via WebSocket. |
 | `GET` | `/turn?sessionId=...&promptId=...` | Return the full conversation turn for the given `promptId`. |
 | `GET` | `/debug?sessionId=...` | Return debug info: project path, log path, model, buffer size, status, error, etc. |
@@ -144,20 +150,21 @@ The plugin listens on a random local port; CloudCLI proxies `/api/plugins/progre
 
 ## Five-turn polling mode
 
-Extraction now always works in 5-turn chunks:
+ProgressTree extraction works in 5-turn chunks:
 
 1. Incremental extraction filters out turns whose `promptId` already exists in the current progress tree.
-2. Remaining turns are split into 5-turn chunks.
-3. Each chunk is extracted sequentially, using the result of the previous chunk as the current tree.
-4. After every chunk the intermediate tree is saved to the store and broadcast to the UI via WebSocket, so you see progress appear gradually instead of waiting for the whole session.
-5. Each chunk sends one LLM request. Invalid JSON or API failures are reported to the UI and trace log rather than automatically retried.
+2. Remaining turns are split into 5-turn chunks and sent one request per chunk.
+3. Each response is a patch containing only affected goals and steps.
+4. The server merges patches locally, preserving omitted nodes and applying explicit deletions.
+5. Intermediate trees are saved and broadcast to the UI via WebSocket.
 
-Manual `/refresh` still processes the complete session log in 5-turn chunks.
+Manual `/refresh` processes the complete session log in 5-turn chunks using the active mode.
 
 ## Troubleshooting
 
 - **No progress shown**:
-  - Verify `ANTHROPIC_API_KEY` is configured.
+  - Default mode does not require an API key.
+  - Verify `ANTHROPIC_API_KEY` is configured when using ProgressTree mode.
   - Verify the session log exists. Check the path via `/debug?sessionId=...`.
   - Check the CloudCLI Network tab to confirm the WebSocket `/ws` connection is open and the `subscribe` message was sent.
 - **Sync errors**:
@@ -187,6 +194,7 @@ The log directory is created automatically. Each extraction emits:
 - `conversation`: the normalized Codex turns before LLM filtering, including `thinkingText` and `toolText`.
 - `prompt`: the exact prompt sent for each LLM attempt or polling chunk.
 - `usage`: actual `inputTokens`, `outputTokens`, and cache token fields returned by the API.
+- `response`: complete raw model output, output characters, parsed JSON characters, and output tokens.
 
 The `context.mode` field distinguishes automatic triggers (`incremental`) from manual `/refresh` requests (`full`). Codex currently always reports `parseScope: "full_file"` because `buildCodexTurnsFromLog` rereads the complete rollout for every extraction. Prompts contain conversation text, so enable this only while debugging and monitor the log file size.
 

@@ -17,6 +17,7 @@ export declare class ProgressServer {
     private cloudcliToReal;
     private config;
     private options;
+    private ruleExtractor;
     constructor(options?: ProgressServerOptions);
     start(): Promise<{
         port: number;
@@ -36,6 +37,7 @@ export declare class ProgressServer {
     private handleHealth;
     private handleWatch;
     private handleProgress;
+    private handleMode;
     private handleRefresh;
     private handleTurn;
     private handleDebug;

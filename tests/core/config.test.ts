@@ -259,11 +259,22 @@ describe('loadConfig', () => {
     expect(config.model).toBe('claude-3-5-sonnet-20241022');
   });
 
-  it('throws when no API key is found', () => {
+  it('uses default extraction mode without requiring an API key', () => {
+    const config = loadConfig({
+      settingsPath: '/nonexistent/settings.json',
+      env: {},
+    });
+    expect(config.extractionMode).toBe('default');
+    expect(config.apiKey).toBe('');
+  });
+
+  it('requires an API key for progress-tree mode', () => {
     expect(() =>
       loadConfig({
         settingsPath: '/nonexistent/settings.json',
-        env: {},
+        env: {
+          PROGRESS_EXTRACTION_MODE: 'progress-tree',
+        },
       }),
     ).toThrow(/Anthropic API key/);
   });
@@ -293,6 +304,26 @@ describe('loadConfig', () => {
     const config = loadConfig({ pluginRoot });
     expect(config.usePolling).toBe(true);
     tmp.cleanup();
+  });
+  it('reads extraction mode from plugin .env', () => {
+    const tmp = createTempDir();
+    const pluginRoot = tmp.path;
+    fs.writeFileSync(
+      path.join(pluginRoot, '.env'),
+      'ANTHROPIC_API_KEY=plugin-token\nPROGRESS_EXTRACTION_MODE=progress-tree',
+      'utf-8',
+    );
+
+    const config = loadConfig({ pluginRoot });
+    expect(config.extractionMode).toBe('progress-tree');
+    tmp.cleanup();
+  });
+  it('defaults extraction mode to default', () => {
+    const config = loadConfig({
+      settingsPath: '/nonexistent/settings.json',
+      env: { ANTHROPIC_API_KEY: 'token' },
+    });
+    expect(config.extractionMode).toBe('default');
   });
   it('reads extraction trace settings from plugin .env', () => {
     const tmp = createTempDir();

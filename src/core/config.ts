@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { LLMConfig } from './types.js';
+import type { ExtractionMode, LLMConfig } from './types.js';
 
 export interface ConfigOptions {
   projectPath?: string;
@@ -54,6 +54,16 @@ function parseBoolToken(value: string | undefined): boolean | undefined {
   return undefined;
 }
 
+function parseExtractionMode(value: string | undefined): ExtractionMode | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'progress-tree' || normalized === 'llm'
+    ? 'progress-tree'
+    : normalized === 'default' || normalized === 'query' || normalized === 'rule'
+      ? 'default'
+      : undefined;
+}
+
 function readSettingsEnv(settingsPath: string): Partial<LLMConfig> {
   try {
     const raw = fs.readFileSync(settingsPath, 'utf-8');
@@ -63,6 +73,7 @@ function readSettingsEnv(settingsPath: string): Partial<LLMConfig> {
       apiKey: env.ANTHROPIC_API_KEY ?? env.ANTHROPIC_AUTH_TOKEN,
       baseUrl: env.ANTHROPIC_BASE_URL,
       model: env.PROGRESS_MODEL ?? env.ANTHROPIC_MODEL,
+      extractionMode: parseExtractionMode(env.PROGRESS_EXTRACTION_MODE),
       traceExtractions: parseBoolToken(env.PROGRESS_TRACE_EXTRACTIONS),
       traceLogDir: env.PROGRESS_TRACE_LOG_DIR,
       traceLogFile: env.PROGRESS_TRACE_LOG_FILE,
@@ -100,6 +111,7 @@ function readEnvFile(basePath: string): Partial<LLMConfig> {
       maxTokens: parseIntToken(vars.MAX_TOKENS ?? vars.PROGRESS_MAX_TOKENS ?? vars.ANTHROPIC_MAX_TOKENS),
       requestTimeoutMs: parseIntToken(vars.TIMEOUT_MS ?? vars.PROGRESS_TIMEOUT_MS ?? vars.ANTHROPIC_TIMEOUT_MS),
       usePolling: parseBoolToken(vars.PROGRESS_USE_POLLING),
+      extractionMode: parseExtractionMode(vars.PROGRESS_EXTRACTION_MODE),
       traceExtractions: parseBoolToken(vars.PROGRESS_TRACE_EXTRACTIONS),
       traceLogDir: vars.PROGRESS_TRACE_LOG_DIR,
       traceLogFile: vars.PROGRESS_TRACE_LOG_FILE,
@@ -128,14 +140,21 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
     headers['x-plugin-secret-anthropic-api-key'] ??
     headers['x-plugin-secret-anthropic-auth-token'];
 
-  if (!apiKey) {
+  const extractionMode =
+    projectEnv.extractionMode ??
+    pluginEnv.extractionMode ??
+    settings.extractionMode ??
+    parseExtractionMode(env.PROGRESS_EXTRACTION_MODE) ??
+    'default';
+
+  if (!apiKey && extractionMode !== 'default') {
     throw new Error(
       'Missing Anthropic API key. Set ANTHROPIC_API_KEY in project .env, plugin .env, ~/.claude/settings.json, environment variables, or X-Plugin-Secret headers.',
     );
   }
 
   return {
-    apiKey,
+    apiKey: apiKey ?? '',
     baseUrl:
       projectEnv.baseUrl ??
       pluginEnv.baseUrl ??
@@ -167,6 +186,7 @@ export function loadConfig(options?: ConfigOptions): LLMConfig {
       projectEnv.usePolling ??
       pluginEnv.usePolling ??
       parseBoolToken(env.PROGRESS_USE_POLLING),
+    extractionMode,
     traceExtractions:
       projectEnv.traceExtractions ??
       pluginEnv.traceExtractions ??

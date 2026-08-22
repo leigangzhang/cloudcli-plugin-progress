@@ -46,6 +46,16 @@ function parseBoolToken(value) {
         return false;
     return undefined;
 }
+function parseExtractionMode(value) {
+    if (!value)
+        return undefined;
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'progress-tree' || normalized === 'llm'
+        ? 'progress-tree'
+        : normalized === 'default' || normalized === 'query' || normalized === 'rule'
+            ? 'default'
+            : undefined;
+}
 function readSettingsEnv(settingsPath) {
     try {
         const raw = fs.readFileSync(settingsPath, 'utf-8');
@@ -55,6 +65,7 @@ function readSettingsEnv(settingsPath) {
             apiKey: env.ANTHROPIC_API_KEY ?? env.ANTHROPIC_AUTH_TOKEN,
             baseUrl: env.ANTHROPIC_BASE_URL,
             model: env.PROGRESS_MODEL ?? env.ANTHROPIC_MODEL,
+            extractionMode: parseExtractionMode(env.PROGRESS_EXTRACTION_MODE),
             traceExtractions: parseBoolToken(env.PROGRESS_TRACE_EXTRACTIONS),
             traceLogDir: env.PROGRESS_TRACE_LOG_DIR,
             traceLogFile: env.PROGRESS_TRACE_LOG_FILE,
@@ -93,6 +104,7 @@ function readEnvFile(basePath) {
             maxTokens: parseIntToken(vars.MAX_TOKENS ?? vars.PROGRESS_MAX_TOKENS ?? vars.ANTHROPIC_MAX_TOKENS),
             requestTimeoutMs: parseIntToken(vars.TIMEOUT_MS ?? vars.PROGRESS_TIMEOUT_MS ?? vars.ANTHROPIC_TIMEOUT_MS),
             usePolling: parseBoolToken(vars.PROGRESS_USE_POLLING),
+            extractionMode: parseExtractionMode(vars.PROGRESS_EXTRACTION_MODE),
             traceExtractions: parseBoolToken(vars.PROGRESS_TRACE_EXTRACTIONS),
             traceLogDir: vars.PROGRESS_TRACE_LOG_DIR,
             traceLogFile: vars.PROGRESS_TRACE_LOG_FILE,
@@ -117,11 +129,16 @@ export function loadConfig(options) {
         env.ANTHROPIC_AUTH_TOKEN ??
         headers['x-plugin-secret-anthropic-api-key'] ??
         headers['x-plugin-secret-anthropic-auth-token'];
-    if (!apiKey) {
+    const extractionMode = projectEnv.extractionMode ??
+        pluginEnv.extractionMode ??
+        settings.extractionMode ??
+        parseExtractionMode(env.PROGRESS_EXTRACTION_MODE) ??
+        'default';
+    if (!apiKey && extractionMode !== 'default') {
         throw new Error('Missing Anthropic API key. Set ANTHROPIC_API_KEY in project .env, plugin .env, ~/.claude/settings.json, environment variables, or X-Plugin-Secret headers.');
     }
     return {
-        apiKey,
+        apiKey: apiKey ?? '',
         baseUrl: projectEnv.baseUrl ??
             pluginEnv.baseUrl ??
             settings.baseUrl ??
@@ -148,6 +165,7 @@ export function loadConfig(options) {
         usePolling: projectEnv.usePolling ??
             pluginEnv.usePolling ??
             parseBoolToken(env.PROGRESS_USE_POLLING),
+        extractionMode,
         traceExtractions: projectEnv.traceExtractions ??
             pluginEnv.traceExtractions ??
             settings.traceExtractions ??
