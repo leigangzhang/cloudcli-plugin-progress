@@ -48,7 +48,7 @@ Configuration is read in the following priority order:
 | `ANTHROPIC_API_KEY` | ProgressTree only | LLM API key. Also accepts `ANTHROPIC_AUTH_TOKEN` or `API_KEY`. |
 | `ANTHROPIC_BASE_URL` | No | Custom API base URL. Also accepts `BASE_URL`. |
 | `PROGRESS_MODEL` / `ANTHROPIC_MODEL` / `MODEL` | No | Extraction model. Defaults to `claude-3-5-sonnet-20241022`. |
-| `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to and is capped at `4096`. |
+| `MAX_TOKENS` / `PROGRESS_MAX_TOKENS` / `ANTHROPIC_MAX_TOKENS` | No | Max output tokens per extraction. Defaults to and is capped at `8192`. |
 | `TIMEOUT_MS` / `PROGRESS_TIMEOUT_MS` / `ANTHROPIC_TIMEOUT_MS` | No | LLM request timeout in milliseconds. Defaults to `60000`. |
 | `PROGRESS_USE_POLLING` | No | Deprecated compatibility flag. All extractions now use 5-turn chunks. |
 | `PROGRESS_EXTRACTION_MODE` | No | `default` or `progress-tree`. Defaults to `default`. |
@@ -173,7 +173,7 @@ Mode switching preserves ProgressTree snapshots. Switching from Default to Progr
   - The UI displays the error message. Use `/debug` for details; API keys are redacted in logs.
 - **Large-session extraction fails**:
   - Extraction now processes pending turns in 5-turn chunks and does not retry automatically.
-  - Set `MAX_TOKENS` up to the `4096` cap to give the model more room for the JSON response.
+  - Set `MAX_TOKENS` up to the `8192` cap to give the model more room for the JSON response.
 - **WebSocket not updating**:
   - Ensure the plugin server logged `{ "ready": true, "port": ... }` and the `subscribe` message contains the correct `sessionId`.
 

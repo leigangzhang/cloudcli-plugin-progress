@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isProgressStatus, validateProgressTree } from './schema.js';
 import { estimateTokens, measureConversationTurns, } from './trace.js';
-const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 const ASSISTANT_SUMMARY_LIMIT = 500;
 const USER_TEXT_LIMIT = 2000;
 const SYSTEM_PROMPT = `You are a session progress updater. Your job is to apply new conversation turns to an existing progress tree.
@@ -20,9 +20,9 @@ Rules:
 3. For existing goals or steps, unchanged fields may be omitted; the server fills them from the current tree. New nodes must contain a non-empty "id", exact "promptId", "subject", "description", and "status".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
-6. Use one short, clear sentence for each subject and description. Do not restate the turn text.
+6. Keep each subject under 80 characters and each description under 120 characters. Do not restate the turn text. Omit unchanged fields for existing nodes.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
-8. Your response must start with the character "{". Output ONLY valid JSON. Do not output reasoning, explanations, markdown fences, or text before or after the JSON.`;
+8. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
 function isObject(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -380,6 +380,7 @@ export class LLMExtractionEngineImpl {
             const response = await this.client.messages.create({
                 model: this.config.model,
                 max_tokens: maxTokens,
+                temperature: 0,
                 system: SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: prompt }],
             });
