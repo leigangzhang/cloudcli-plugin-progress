@@ -140,9 +140,19 @@ function previousStepByPromptId(previous) {
     }
     return steps;
 }
+function previousStepById(previous) {
+    const steps = new Map();
+    for (const goal of previous.goals) {
+        for (const step of goal.steps ?? []) {
+            steps.set(step.id, step);
+        }
+    }
+    return steps;
+}
 function repairPatchIds(patch, previous) {
     const previousGoalsById = new Map(previous.goals.map((goal) => [goal.id, goal]));
     const previousSteps = previousStepByPromptId(previous);
+    const previousStepsById = previousStepById(previous);
     const usedGoalIds = new Set();
     const usedStepIds = new Set();
     const upsertGoals = patch.upsertGoals.map((goal) => {
@@ -167,11 +177,15 @@ function repairPatchIds(patch, previous) {
             : previousGoal?.status ?? 'in_progress';
         const steps = goal.steps?.map((step, index) => {
             const suppliedStepId = nonEmptyString(step.id);
-            const previousStep = previousSteps.get(step.promptId);
+            const previousStep = previousSteps.get(step.promptId) ??
+                (suppliedStepId ? previousStepsById.get(suppliedStepId) : undefined);
             const stepId = suppliedStepId && !usedStepIds.has(suppliedStepId)
                 ? suppliedStepId
                 : uniqueId(previousStep?.id ?? `step-${stableHash(step.promptId || `${goalId}:${index}`)}`, usedStepIds);
             usedStepIds.add(stepId);
+            const promptId = nonEmptyString(step.promptId) ??
+                previousStep?.promptId ??
+                stepId;
             const stepSubject = nonEmptyString(step.subject) ??
                 previousStep?.subject ??
                 'Untitled step';
@@ -184,6 +198,7 @@ function repairPatchIds(patch, previous) {
             return {
                 ...step,
                 id: stepId,
+                promptId,
                 subject: stepSubject,
                 status: stepStatus,
                 ...(stepDescription ? { description: stepDescription } : {}),
@@ -403,12 +418,13 @@ export class LLMExtractionEngineImpl {
             responseBlocks = response.content.map((block) => block.type === 'text'
                 ? {
                     type: block.type,
-                    text: block.text,
+                    preview: block.text.slice(0, 200),
                     characters: block.text.length,
                 }
                 : {
                     type: block.type,
-                    text: JSON.stringify(block),
+                    preview: JSON.stringify(block).slice(0, 200),
+                    characters: JSON.stringify(block).length,
                 });
             rawResponse = JSON.stringify(response);
             console.log(JSON.stringify({

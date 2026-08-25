@@ -62,7 +62,7 @@ export type ExtractionTraceEvent = {
     contentBlocks?: Array<{
         type: string;
         characters?: number;
-        text?: string;
+        preview?: string;
     }>;
 };
 export declare function estimateTokens(text: string | undefined): number;

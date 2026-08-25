@@ -74,7 +74,7 @@ export type ExtractionTraceEvent =
       contentBlocks?: Array<{
         type: string;
         characters?: number;
-        text?: string;
+        preview?: string;
       }>;
     };
 

@@ -464,7 +464,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
               id: 's1',
               subject: '',
               status: '' as ProgressStep['status'],
-              promptId: 'p1',
+              promptId: '',
             },
           ],
         },
@@ -476,5 +476,6 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].status).toBe('in_progress');
     expect(result.goals[0].steps?.[0].subject).toBe('Existing step subject');
     expect(result.goals[0].steps?.[0].status).toBe('pending');
+    expect(result.goals[0].steps?.[0].promptId).toBe('p1');
   });
 });
