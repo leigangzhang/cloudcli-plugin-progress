@@ -175,7 +175,21 @@ export class ProgressServer {
         catch (err) {
             const message = err.message;
             const apiKey = session.extractor ? this.config.apiKey : this.config.apiKey;
-            console.error('Extraction failed:', redactApiKey(message, apiKey));
+            const redacted = redactApiKey(message, apiKey);
+            console.error('Extraction failed:', redacted);
+            writeExtractionTrace({
+                source: 'progress-plugin',
+                level: 'error',
+                timestamp: new Date().toISOString(),
+                sessionId: session.sessionId,
+                cloudcliSessionId: session.cloudcliSessionId,
+                projectPath: session.projectPath,
+                provider: session.provider,
+                extractionMode: session.extractionMode,
+                mode: fullRebuild ? 'full' : 'incremental',
+                logPath: session.watcher.getFilePath(),
+                error: redacted,
+            }, this.buildTraceEnvironment());
             this.setStatus(session.sessionId, 'error', message);
         }
     }
@@ -195,13 +209,22 @@ export class ProgressServer {
         };
     }
     traceExtraction(event) {
-        if (event.context.provider !== 'codex')
+        const isErrorEvent = (event.type === 'response' && Boolean(event.error)) ||
+            (event.type === 'usage' && Boolean(event.error));
+        if (event.context.provider !== 'codex' && !isErrorEvent)
             return;
-        if (this.options.traceExtractions === false)
+        if (this.options.traceExtractions === false && !isErrorEvent)
             return;
         const configuredTrace = this.options.traceExtractions === true ? true : this.config.traceExtractions;
-        if (!resolveExtractionTraceEnabled(configuredTrace))
+        if (!resolveExtractionTraceEnabled(configuredTrace) && !isErrorEvent)
             return;
+        writeExtractionTrace({
+            source: 'progress-plugin',
+            timestamp: new Date().toISOString(),
+            ...event,
+        }, this.buildTraceEnvironment());
+    }
+    buildTraceEnvironment() {
         const traceEnv = { ...process.env };
         if (this.config.traceLogDir) {
             traceEnv.PROGRESS_TRACE_LOG_DIR = this.config.traceLogDir;
@@ -209,11 +232,7 @@ export class ProgressServer {
         if (this.config.traceLogFile) {
             traceEnv.PROGRESS_TRACE_LOG_FILE = this.config.traceLogFile;
         }
-        writeExtractionTrace({
-            source: 'progress-plugin',
-            timestamp: new Date().toISOString(),
-            ...event,
-        }, traceEnv);
+        return traceEnv;
     }
     async getOrCreateSession(cloudcliSessionId, projectPath) {
         const resolved = await resolveSessionLogPath(projectPath, cloudcliSessionId, this.options.projectsDir);

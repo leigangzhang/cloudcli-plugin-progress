@@ -33,6 +33,7 @@ export declare class ProgressServer {
     private initializeSessionTree;
     private buildTraceContext;
     private traceExtraction;
+    private buildTraceEnvironment;
     private getOrCreateSession;
     private resolveSessionId;
     private handleHttp;

@@ -198,6 +198,8 @@ The log directory is created automatically. Each extraction emits:
 - `usage`: actual `inputTokens`, `outputTokens`, and cache token fields returned by the API.
 - `response`: complete raw model output, output characters, parsed JSON characters, and output tokens.
 
+Extraction error events are written to the log even when full trace logging is disabled.
+
 The `context.mode` field distinguishes automatic triggers (`incremental`) from manual `/refresh` requests (`full`). Codex currently always reports `parseScope: "full_file"` because `buildCodexTurnsFromLog` rereads the complete rollout for every extraction. Prompts contain conversation text, so enable this only while debugging and monitor the log file size.
 
 Trace settings are read from the plugin `.env` through the normal configuration chain, with the process environment as a fallback. CloudCLI does not need to inject these variables into the backend process.

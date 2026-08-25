@@ -281,3 +281,64 @@ describe('ProgressServer debug endpoint', () => {
     expect(response.error).toMatch(/Session log not found/);
   });
 });
+
+describe('ProgressServer extraction error logging', () => {
+  it('writes extraction failures even when trace logging is disabled', async () => {
+    const tmp = createTempDir();
+    const projectPath = tmp.path;
+    const projectsDir = path.join(tmp.path, 'projects');
+    const encoded = encodeProjectPath(projectPath);
+    const logFile = path.join(projectsDir, encoded, 'error-session.jsonl');
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    writeJsonl(logFile, [
+      {
+        type: 'user',
+        uuid: 'u1',
+        promptId: 'p1',
+        content: [{ type: 'text', text: 'hello' }],
+      },
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'u1',
+        promptId: 'p1',
+        content: [{ type: 'text', text: 'done' }],
+      },
+    ]);
+
+    const extractor: LLMExtractionEngine = {
+      extract: vi.fn().mockRejectedValue(new Error('boom')),
+      onUsage: vi.fn().mockReturnValue(() => {}),
+    } as unknown as LLMExtractionEngine;
+    const traceLogDir = path.join(tmp.path, 'logs');
+    const server = new ProgressServer({
+      config: {
+        apiKey: 'test-key',
+        model: 'test-model',
+        extractionMode: 'progress-tree',
+        traceLogDir,
+        traceLogFile: 'progress-plugin.log',
+      },
+      projectsDir,
+      snapshotDir: path.join(tmp.path, 'snapshots'),
+      extractor,
+    });
+    const { port } = await server.start();
+
+    const watch = await fetchJson(port, 'POST', '/watch', {
+      projectPath,
+      sessionId: 'error-session',
+    });
+    expect(watch.status).toBe(200);
+
+    const logText = fs.readFileSync(
+      path.join(traceLogDir, 'progress-plugin.log'),
+      'utf-8',
+    );
+    expect(logText).toContain('"level":"error"');
+    expect(logText).toContain('boom');
+
+    await server.stop();
+    tmp.cleanup();
+  });
+});
