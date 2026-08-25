@@ -58,6 +58,7 @@ export type ExtractionTraceEvent = {
     parsedCharacters: number;
     outputTokens: number;
     error?: string;
+    rawResponse?: string;
     contentBlocks?: Array<{
         type: string;
         characters?: number;

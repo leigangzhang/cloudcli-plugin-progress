@@ -486,6 +486,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       DEFAULT_MAX_OUTPUT_TOKENS,
     );
     let rawOutput = '';
+    let rawResponse = '';
     let responseBlocks: Array<{
       type: string;
       characters?: number;
@@ -526,7 +527,19 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
           : {
               type: block.type,
               text: JSON.stringify(block),
-            },
+          },
+      );
+      rawResponse = JSON.stringify(response);
+      console.log(
+        JSON.stringify({
+          source: 'progress-plugin',
+          level: 'response',
+          timestamp: new Date().toISOString(),
+          requestId: traceContext?.requestId,
+          mode: traceContext?.mode,
+          chunkIndex: traceContext?.chunkIndex,
+          rawResponse,
+        }),
       );
       rawOutput = response.content
         .map((block) => (block.type === 'text' ? block.text : ''))
@@ -575,6 +588,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
           outputCharacters: rawOutput.length,
           parsedCharacters: jsonText.length,
           outputTokens,
+          rawResponse,
           contentBlocks: responseBlocks,
         });
       }
@@ -592,6 +606,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
           parsedCharacters: 0,
           outputTokens: 0,
           error: message,
+          rawResponse,
           contentBlocks: responseBlocks,
         });
         this.trace({

@@ -376,6 +376,7 @@ export class LLMExtractionEngineImpl {
         }
         const maxTokens = Math.min(this.config.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS);
         let rawOutput = '';
+        let rawResponse = '';
         let responseBlocks = [];
         try {
             const response = await this.client.messages.create({
@@ -409,6 +410,16 @@ export class LLMExtractionEngineImpl {
                     type: block.type,
                     text: JSON.stringify(block),
                 });
+            rawResponse = JSON.stringify(response);
+            console.log(JSON.stringify({
+                source: 'progress-plugin',
+                level: 'response',
+                timestamp: new Date().toISOString(),
+                requestId: traceContext?.requestId,
+                mode: traceContext?.mode,
+                chunkIndex: traceContext?.chunkIndex,
+                rawResponse,
+            }));
             rawOutput = response.content
                 .map((block) => (block.type === 'text' ? block.text : ''))
                 .join('');
@@ -454,6 +465,7 @@ export class LLMExtractionEngineImpl {
                     outputCharacters: rawOutput.length,
                     parsedCharacters: jsonText.length,
                     outputTokens,
+                    rawResponse,
                     contentBlocks: responseBlocks,
                 });
             }
@@ -471,6 +483,7 @@ export class LLMExtractionEngineImpl {
                     parsedCharacters: 0,
                     outputTokens: 0,
                     error: message,
+                    rawResponse,
                     contentBlocks: responseBlocks,
                 });
                 this.trace({
