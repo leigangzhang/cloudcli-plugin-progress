@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { validateProgressTree } from './schema.js';
+import { isProgressStatus, validateProgressTree } from './schema.js';
 import {
   estimateTokens,
   measureConversationTurns,
@@ -42,7 +42,7 @@ Return a ProgressTreePatch object only:
 Rules:
 1. Do not return the full progress tree. Return only goals and steps affected by the supplied turns.
 2. Each upsert goal must contain its stable "id". Include affected steps only; unchanged steps may be omitted.
-3. Every new or updated step must contain a non-empty "id", exact "promptId", "subject", "description", and "status".
+3. For existing goals or steps, unchanged fields may be omitted; the server fills them from the current tree. New nodes must contain a non-empty "id", exact "promptId", "subject", "description", and "status".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
 6. Use one short, clear sentence for each subject and description. Do not restate the turn text.
@@ -224,6 +224,13 @@ function repairPatchIds(patch: ProgressTreePatch, previous: ProgressTree): Progr
     } else {
       usedGoalIds.add(suppliedGoalId ?? goalId);
     }
+    const subject =
+      nonEmptyString(goal.subject) ??
+      previousGoal?.subject ??
+      'Untitled goal';
+    const status = isProgressStatus(goal.status)
+      ? goal.status
+      : previousGoal?.status ?? 'in_progress';
 
     const steps = goal.steps?.map((step, index) => {
       const suppliedStepId = nonEmptyString(step.id);
@@ -234,12 +241,40 @@ function repairPatchIds(patch: ProgressTreePatch, previous: ProgressTree): Progr
           : uniqueId(
               previousStep?.id ?? `step-${stableHash(step.promptId || `${goalId}:${index}`)}`,
               usedStepIds,
-            );
+          );
       usedStepIds.add(stepId);
-      return { ...step, id: stepId };
+      const stepSubject =
+        nonEmptyString(step.subject) ??
+        previousStep?.subject ??
+        'Untitled step';
+      const stepStatus = isProgressStatus(step.status)
+        ? step.status
+        : previousStep?.status ?? 'pending';
+      const stepDescription =
+        typeof step.description === 'string' && step.description.length > 0
+          ? step.description
+          : previousStep?.description;
+      return {
+        ...step,
+        id: stepId,
+        subject: stepSubject,
+        status: stepStatus,
+        ...(stepDescription ? { description: stepDescription } : {}),
+      };
     });
 
-    return { ...goal, id: goalId, ...(steps ? { steps } : {}) };
+    return {
+      ...goal,
+      id: goalId,
+      subject,
+      status,
+      ...(typeof goal.description === 'string' && goal.description.length > 0
+        ? { description: goal.description }
+        : previousGoal?.description
+          ? { description: previousGoal.description }
+          : {}),
+      ...(steps ? { steps } : {}),
+    };
   });
 
   return { ...patch, upsertGoals };

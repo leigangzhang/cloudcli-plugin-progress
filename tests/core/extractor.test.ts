@@ -429,4 +429,50 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].id).toBe('g1');
     expect(result.goals[0].steps?.[0].id).toBe('s1');
   });
+
+  it('fills omitted patch fields from existing nodes', async () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Existing subject',
+          description: 'Existing description',
+          status: 'in_progress',
+          steps: [
+            {
+              id: 's1',
+              subject: 'Existing step subject',
+              description: 'Existing step description',
+              status: 'pending',
+              promptId: 'p1',
+            },
+          ],
+        },
+      ],
+    };
+    const client = mockClient({
+      text: patchResponse(2, [
+        {
+          id: 'g1',
+          subject: '',
+          status: '' as ProgressGoal['status'],
+          steps: [
+            {
+              id: 's1',
+              subject: '',
+              status: '' as ProgressStep['status'],
+              promptId: 'p1',
+            },
+          ],
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, [turn()]);
+    expect(result.goals[0].subject).toBe('Existing subject');
+    expect(result.goals[0].status).toBe('in_progress');
+    expect(result.goals[0].steps?.[0].subject).toBe('Existing step subject');
+    expect(result.goals[0].steps?.[0].status).toBe('pending');
+  });
 });
