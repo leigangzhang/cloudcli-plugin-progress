@@ -1356,6 +1356,13 @@ function renderProgressTree(tree, options, colors) {
   if (tree.goals.length === 0) {
     return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No goals tracked yet.</div>`;
   }
+  if (options.extractionMode === "default") {
+    const steps = tree.goals.flatMap((goal) => goal.steps ?? []);
+    if (steps.length === 0) {
+      return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No queries tracked yet.</div>`;
+    }
+    return `<div class="pp-tree pp-tree-flat" style="display:flex;flex-direction:column;gap:8px;padding:2px 0;">${steps.map((step, index) => renderStep(step, options, colors, index + 1)).join("")}</div>`;
+  }
   return `<div class="pp-tree" style="display:flex;flex-direction:column;gap:8px;">${tree.goals.map((goal) => renderGoal(goal, options, colors)).join("")}</div>`;
 }
 function renderGoal(goal, options, colors) {
@@ -1379,16 +1386,18 @@ function renderSteps(goal, options, colors) {
   if (steps.length === 0) return "";
   return `<div class="pp-steps" style="margin-left:20px;margin-top:4px;padding-left:10px;border-left:1px solid ${colors.border};">${steps.map((step) => renderStep(step, options, colors)).join("")}</div>`;
 }
-function renderStep(step, options, colors) {
+function renderStep(step, options, colors, sequence) {
   const expanded = options.turnExpanded.has(step.id);
   const title = escapeHtml2(step.subject);
   const completedIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>`;
   const icon = step.status === "completed" ? completedIcon : pendingIcon;
   const panel = expanded ? renderTurnPanel(step, options, colors) : "";
+  const sequenceLabel = sequence ? `<span style="width:18px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.72rem;">${sequence}.</span>` : "";
   return `
     <div class="pp-step" data-step-id="${escapeHtml2(step.id)}" data-prompt-id="${escapeHtml2(step.promptId)}">
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;">
+        ${sequenceLabel}
         <span style="display:inline-flex;width:10px;height:10px;flex-shrink:0;color:${colors.muted};">${icon}</span>
         <span style="font-size:0.76rem;color:${colors.text};opacity:0.9;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
       </div>
@@ -1526,28 +1535,30 @@ function mount(container, api) {
     const refreshHover = isRefreshing ? "" : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
     const modeControl = `
-      <div class="pp-mode-control" style="display:inline-flex;border:1px solid ${colors.border};border-radius:4px;overflow:hidden;">
+      <div class="pp-mode-control" style="display:flex;align-items:center;gap:12px;">
         ${["default", "progress-tree"].map((mode) => {
       const active = mode === extractionMode;
-      return `<button data-mode="${mode}" style="border:0;padding:4px 9px;font-size:0.68rem;background:${active ? colors.surface : colors.dim};color:${colors.text};cursor:pointer;">${mode === "default" ? "Default" : "ProgressTree"}</button>`;
+      const label = mode === "default" ? "Default" : "ProgressTree";
+      return `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;color:${colors.text};cursor:pointer;"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? "checked" : ""} style="accent-color:${colors.accent};margin:0;"><span>${label}</span></label>`;
     }).join("")}
       </div>
     `;
     const header = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
-        <div style="display:flex;align-items:center;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
           ${modeControl}
-          <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
-            <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
-          </button>
+          <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
         </div>
+        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
+        </button>
       </div>
     `;
     root.innerHTML = header + renderProgressTree(
       tree,
       {
         theme: api.context.theme,
+        extractionMode,
         expanded,
         turnExpanded,
         turnRecords
@@ -1574,9 +1585,9 @@ function mount(container, api) {
     });
     const refreshBtn = root.querySelector("#pp-refresh");
     refreshBtn?.addEventListener("click", () => void refresh());
-    root.querySelectorAll("[data-mode]").forEach((el) => {
-      el.addEventListener("click", () => {
-        const mode = el.dataset.mode;
+    root.querySelectorAll('input[name="pp-extraction-mode"]').forEach((el) => {
+      el.addEventListener("change", () => {
+        const mode = el.value;
         if (mode !== extractionMode) void setMode(mode);
       });
     });

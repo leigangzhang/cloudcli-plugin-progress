@@ -87,6 +87,7 @@ describe('mount/unmount', () => {
     expect(container.innerHTML).toContain('Progress');
     expect(container.innerHTML).toContain('Default');
     expect(container.innerHTML).toContain('ProgressTree');
+    expect(container.innerHTML).toContain('type="radio"');
   });
 
   it('unmount calls cleanup', () => {

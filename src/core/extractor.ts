@@ -479,7 +479,31 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         .map((block) => (block.type === 'text' ? block.text : ''))
         .join('');
       const jsonText = extractJsonObject(rawOutput);
-      const parsedPatch = JSON.parse(jsonText) as ProgressTreePatch;
+      const parsedResponse = JSON.parse(jsonText) as unknown;
+      if (isObject(parsedResponse) && Array.isArray(parsedResponse.goals)) {
+        if (traceContext?.mode !== 'full') {
+          throw new Error('Incremental extraction requires a patch response');
+        }
+        const fullTree = parsedResponse as unknown as ProgressTree;
+        const fullTreeErrors = validateProgressTree(fullTree);
+        if (fullTreeErrors.length > 0) {
+          throw new Error(`Schema validation failed: ${fullTreeErrors.join('; ')}`);
+        }
+        if (traceContext && this.trace) {
+          this.trace({
+            type: 'response',
+            context: traceContext,
+            attempt,
+            rawOutput,
+            outputCharacters: rawOutput.length,
+            parsedCharacters: jsonText.length,
+            outputTokens,
+          });
+        }
+        return fullTree;
+      }
+
+      const parsedPatch = parsedResponse as ProgressTreePatch;
       if (!isObject(parsedPatch) || !Array.isArray(parsedPatch.upsertGoals)) {
         throw new Error('Model response must contain patch.upsertGoals');
       }

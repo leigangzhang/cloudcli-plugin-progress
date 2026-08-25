@@ -11,7 +11,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
   - **Step**: one conversation turn. Click a step to expand the original user question, model reasoning, and assistant reply.
 - **Local conversation records** — Step details are read from the local `.jsonl` file and rendered as Markdown. No raw conversation text is returned by the LLM.
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
-- **Default query extraction** — Default mode extracts user queries locally without calling an LLM. Each new query is appended to the progress tree with zero input or output token cost.
+- **Default query extraction** — Default mode extracts user queries locally without calling an LLM and displays them as a flat, numbered list instead of wrapping them under a goal.
 - **ProgressTree extraction** — Optional LLM mode uses a compact tree digest plus user text and a short assistant summary to update only affected nodes through a local patch merge.
 - **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
 - **Five-turn polling** — ProgressTree sessions are processed in 5-turn chunks. Incremental triggers only send turns that do not yet have a progress step.
@@ -89,7 +89,7 @@ npm run dev
 1. Open CloudCLI and start a session.
 2. Click the **Progress** tab.
 3. Default mode shows locally extracted user queries without requiring an API key.
-4. Switch to **ProgressTree** to enable LLM extraction for the current session.
+4. Use the radio controls in the top-left to switch between **Default** and **ProgressTree**.
 5. The plugin watches the current session log and shows:
    - **Goals**: topics or objectives inferred from the conversation.
    - **Steps**: one step per conversation turn. The step subject is a one-sentence summary of that turn.
