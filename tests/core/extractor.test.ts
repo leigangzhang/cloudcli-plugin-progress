@@ -265,6 +265,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(response).toBeDefined();
     expect(response!.outputTokens).toBe(123);
     expect(response!.rawOutput).toContain('"upsertGoals"');
+    expect(response!.contentBlocks?.[0]).toMatchObject({ type: 'text' });
     expect(response!.outputCharacters).toBeGreaterThanOrEqual(response!.parsedCharacters);
   });
 

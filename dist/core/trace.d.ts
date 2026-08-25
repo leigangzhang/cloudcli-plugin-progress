@@ -58,6 +58,11 @@ export type ExtractionTraceEvent = {
     parsedCharacters: number;
     outputTokens: number;
     error?: string;
+    contentBlocks?: Array<{
+        type: string;
+        characters?: number;
+        text?: string;
+    }>;
 };
 export declare function estimateTokens(text: string | undefined): number;
 export declare function measureConversationTurns(turns: ConversationTurn[]): ConversationTraceMetrics;
