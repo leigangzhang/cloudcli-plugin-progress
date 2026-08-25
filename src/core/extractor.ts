@@ -201,9 +201,20 @@ function previousStepByPromptId(previous: ProgressTree): Map<string, ProgressSte
   return steps;
 }
 
+function previousStepById(previous: ProgressTree): Map<string, ProgressStep> {
+  const steps = new Map<string, ProgressStep>();
+  for (const goal of previous.goals) {
+    for (const step of goal.steps ?? []) {
+      steps.set(step.id, step);
+    }
+  }
+  return steps;
+}
+
 function repairPatchIds(patch: ProgressTreePatch, previous: ProgressTree): ProgressTreePatch {
   const previousGoalsById = new Map(previous.goals.map((goal) => [goal.id, goal]));
   const previousSteps = previousStepByPromptId(previous);
+  const previousStepsById = previousStepById(previous);
   const usedGoalIds = new Set<string>();
   const usedStepIds = new Set<string>();
 
@@ -234,7 +245,9 @@ function repairPatchIds(patch: ProgressTreePatch, previous: ProgressTree): Progr
 
     const steps = goal.steps?.map((step, index) => {
       const suppliedStepId = nonEmptyString(step.id);
-      const previousStep = previousSteps.get(step.promptId);
+      const previousStep =
+        previousSteps.get(step.promptId) ??
+        (suppliedStepId ? previousStepsById.get(suppliedStepId) : undefined);
       const stepId =
         suppliedStepId && !usedStepIds.has(suppliedStepId)
           ? suppliedStepId
@@ -243,6 +256,10 @@ function repairPatchIds(patch: ProgressTreePatch, previous: ProgressTree): Progr
               usedStepIds,
           );
       usedStepIds.add(stepId);
+      const promptId =
+        nonEmptyString(step.promptId) ??
+        previousStep?.promptId ??
+        stepId;
       const stepSubject =
         nonEmptyString(step.subject) ??
         previousStep?.subject ??
@@ -257,6 +274,7 @@ function repairPatchIds(patch: ProgressTreePatch, previous: ProgressTree): Progr
       return {
         ...step,
         id: stepId,
+        promptId,
         subject: stepSubject,
         status: stepStatus,
         ...(stepDescription ? { description: stepDescription } : {}),
@@ -490,7 +508,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
     let responseBlocks: Array<{
       type: string;
       characters?: number;
-      text?: string;
+      preview?: string;
     }> = [];
     try {
       const response = await this.client.messages.create({
@@ -521,13 +539,14 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         block.type === 'text'
           ? {
               type: block.type,
-              text: block.text,
+              preview: block.text.slice(0, 200),
               characters: block.text.length,
             }
           : {
               type: block.type,
-              text: JSON.stringify(block),
-          },
+              preview: JSON.stringify(block).slice(0, 200),
+              characters: JSON.stringify(block).length,
+            },
       );
       rawResponse = JSON.stringify(response);
       console.log(
