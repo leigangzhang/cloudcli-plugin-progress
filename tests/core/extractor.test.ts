@@ -219,6 +219,51 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(prompt).not.toContain(longReply);
   });
 
+  it('sends only the latest goal digest', async () => {
+    const tree: ProgressTree = {
+      version: 2,
+      goals: [
+        {
+          id: 'old-goal',
+          subject: 'Closed history',
+          status: 'completed',
+          steps: [
+            { id: 'old-step', subject: 'Old', status: 'completed', promptId: 'old' },
+          ],
+        },
+        {
+          id: 'latest-goal',
+          subject: 'Current work',
+          status: 'in_progress',
+          steps: [
+            { id: 'current-step', subject: 'Current', status: 'pending', promptId: 'current' },
+          ],
+        },
+      ],
+    };
+    const client = mockClient({
+      text: patchResponse(3, [
+        {
+          id: 'latest-goal',
+          subject: 'Current work',
+          status: 'completed',
+          steps: [
+            { id: 'current-step', subject: 'Current', status: 'completed', promptId: 'current' },
+          ],
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    await engine.extract(tree, [turn()]);
+    const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      .messages[0].content as string;
+    expect(prompt).toContain('latest-goal');
+    expect(prompt).toContain('current-step');
+    expect(prompt).not.toContain('old-goal');
+    expect(prompt).not.toContain('old-step');
+    expect(prompt).not.toContain('Closed history');
+  });
+
   it('emits conversation, prompt, usage, and response traces', async () => {
     const tree: ProgressTree = { version: 0, goals: [] };
     const client = mockClient({
