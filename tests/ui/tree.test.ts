@@ -49,6 +49,19 @@ describe('renderProgressTree', () => {
     expect(html).toContain('Add login route');
   });
 
+  it('renders default mode as flat sequential steps without goals', () => {
+    const html = renderProgressTree(
+      tree,
+      { ...baseOptions(), extractionMode: 'default' },
+      themeColors(true),
+    );
+    expect(html).not.toContain('Implement auth');
+    expect(html).toContain('1.');
+    expect(html).toContain('2.');
+    expect(html).toContain('Setup bcrypt');
+    expect(html).toContain('Add login route');
+  });
+
   it('renders empty message when no goals', () => {
     const html = renderProgressTree(
       { version: 1, goals: [] },

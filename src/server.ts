@@ -495,6 +495,9 @@ export class ProgressServer {
       return;
     }
 
+    if (session.extractionMode !== body.mode) {
+      session.store.setState({ version: 0, goals: [] });
+    }
     session.extractionMode = body.mode;
     session.store.setExtractionMode(body.mode);
     this.createSessionExtractor(session);
@@ -550,8 +553,12 @@ export class ProgressServer {
     this.setStatus(sessionId, 'syncing');
     try {
       const turns = this.getSessionTurns(session);
+      const inputTree =
+        session.extractionMode === 'progress-tree'
+          ? { version: 0, goals: [] }
+          : session.store.getState();
       const updated = await extractor.extract(
-        session.store.getState(),
+        inputTree,
         turns,
         (progressTree) => {
           session!.store.setState(progressTree);

@@ -1,11 +1,18 @@
 import { marked } from 'marked';
-import type { ProgressGoal, ProgressStep, ProgressTree, TurnResponse } from '../core/types.js';
+import type {
+  ExtractionMode,
+  ProgressGoal,
+  ProgressStep,
+  ProgressTree,
+  TurnResponse,
+} from '../core/types.js';
 import type { ThemeColors } from './theme.js';
 import { statusBadge } from './badge.js';
 import { chevronDown, chevronRight } from './icons.js';
 
 export interface TreeRenderOptions {
   theme: 'dark' | 'light';
+  extractionMode?: ExtractionMode;
   expanded: Set<string>;
   turnExpanded: Set<string>;
   turnRecords: Map<string, TurnResponse>;
@@ -18,6 +25,15 @@ export function renderProgressTree(
 ): string {
   if (tree.goals.length === 0) {
     return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No goals tracked yet.</div>`;
+  }
+  if (options.extractionMode === 'default') {
+    const steps = tree.goals.flatMap((goal) => goal.steps ?? []);
+    if (steps.length === 0) {
+      return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No queries tracked yet.</div>`;
+    }
+    return `<div class="pp-tree pp-tree-flat" style="display:flex;flex-direction:column;gap:8px;padding:2px 0;">${steps
+      .map((step, index) => renderStep(step, options, colors, index + 1))
+      .join('')}</div>`;
   }
   return `<div class="pp-tree" style="display:flex;flex-direction:column;gap:8px;">${tree.goals
     .map((goal) => renderGoal(goal, options, colors))
@@ -49,16 +65,25 @@ function renderSteps(goal: ProgressGoal, options: TreeRenderOptions, colors: The
     .join('')}</div>`;
 }
 
-function renderStep(step: ProgressStep, options: TreeRenderOptions, colors: ThemeColors): string {
+function renderStep(
+  step: ProgressStep,
+  options: TreeRenderOptions,
+  colors: ThemeColors,
+  sequence?: number,
+): string {
   const expanded = options.turnExpanded.has(step.id);
   const title = escapeHtml(step.subject);
   const completedIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>`;
   const icon = step.status === 'completed' ? completedIcon : pendingIcon;
   const panel = expanded ? renderTurnPanel(step, options, colors) : '';
+  const sequenceLabel = sequence
+    ? `<span style="width:18px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.72rem;">${sequence}.</span>`
+    : '';
   return `
     <div class="pp-step" data-step-id="${escapeHtml(step.id)}" data-prompt-id="${escapeHtml(step.promptId)}">
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;">
+        ${sequenceLabel}
         <span style="display:inline-flex;width:10px;height:10px;flex-shrink:0;color:${colors.muted};">${icon}</span>
         <span style="font-size:0.76rem;color:${colors.text};opacity:0.9;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
       </div>

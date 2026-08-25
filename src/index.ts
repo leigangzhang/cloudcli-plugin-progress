@@ -100,22 +100,23 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     const refreshHover = isRefreshing ? '' : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
     const iconClass = isRefreshing ? 'pp-spin' : '';
     const modeControl = `
-      <div class="pp-mode-control" style="display:inline-flex;border:1px solid ${colors.border};border-radius:4px;overflow:hidden;">
+      <div class="pp-mode-control" style="display:flex;align-items:center;gap:12px;">
         ${(['default', 'progress-tree'] as ExtractionMode[]).map((mode) => {
           const active = mode === extractionMode;
-          return `<button data-mode="${mode}" style="border:0;padding:4px 9px;font-size:0.68rem;background:${active ? colors.surface : colors.dim};color:${colors.text};cursor:pointer;">${mode === 'default' ? 'Default' : 'ProgressTree'}</button>`;
+          const label = mode === 'default' ? 'Default' : 'ProgressTree';
+          return `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;color:${colors.text};cursor:pointer;"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? 'checked' : ''} style="accent-color:${colors.accent};margin:0;"><span>${label}</span></label>`;
         }).join('')}
       </div>
     `;
     const header = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
-        <div style="display:flex;align-items:center;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
           ${modeControl}
-          <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
-            <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
-          </button>
+          <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
         </div>
+        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
+        </button>
       </div>
     `;
 
@@ -125,6 +126,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
         tree,
         {
           theme: api.context.theme,
+          extractionMode,
           expanded,
           turnExpanded,
           turnRecords,
@@ -154,9 +156,9 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     const refreshBtn = root.querySelector('#pp-refresh');
     refreshBtn?.addEventListener('click', () => void refresh());
-    root.querySelectorAll('[data-mode]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const mode = (el as HTMLElement).dataset.mode as ExtractionMode;
+    root.querySelectorAll<HTMLInputElement>('input[name="pp-extraction-mode"]').forEach((el) => {
+      el.addEventListener('change', () => {
+        const mode = el.value as ExtractionMode;
         if (mode !== extractionMode) void setMode(mode);
       });
     });

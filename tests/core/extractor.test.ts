@@ -144,6 +144,36 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].steps?.[0].subject).toBe('Updated step');
   });
 
+  it('accepts a full tree response during full refresh', async () => {
+    const fullTree: ProgressTree = {
+      version: 2,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Rebuilt',
+          status: 'completed',
+          steps: [
+            { id: 's1', subject: 'Done', status: 'completed', promptId: 'p1' },
+          ],
+        },
+      ],
+    };
+    const client = mockClient({ text: JSON.stringify(fullTree) });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(
+      { version: 1, goals: [] },
+      [turn()],
+      undefined,
+      {
+        requestId: 'full-request',
+        sessionId: 'sess-1',
+        provider: 'codex',
+        mode: 'full',
+      },
+    );
+    expect(result).toEqual(fullTree);
+  });
+
   it('includes userText and assistant summary but excludes raw thinking and tool text', async () => {
     const tree: ProgressTree = {
       version: 1,

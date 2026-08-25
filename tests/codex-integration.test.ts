@@ -178,6 +178,11 @@ describe('ProgressServer Codex sessions', () => {
     expect(debug.data.provider).toBe('codex');
     expect(debug.data.logTurnCount).toBe(2);
 
+    const mode = await fetchJson(port, 'POST', '/mode', {
+      sessionId: 'codex-cloud',
+      mode: 'progress-tree',
+    });
+    expect(mode.status).toBe(200);
     const refresh = await fetchJson(port, 'POST', '/refresh', {
       sessionId: 'codex-cloud',
     });
@@ -185,6 +190,7 @@ describe('ProgressServer Codex sessions', () => {
     const tree = refresh.data.tree as ProgressTree;
     expect(tree.goals[0].id).toBe('codex-goal');
     const fullCall = (mockExtractor.extract as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+    expect(fullCall[0]).toEqual({ version: 0, goals: [] });
     expect(fullCall[3]).toMatchObject({
       provider: 'codex',
       mode: 'full',
@@ -193,12 +199,20 @@ describe('ProgressServer Codex sessions', () => {
   });
 
   it('switches and reports extraction mode', async () => {
+    const initial = await fetchJson(port, 'POST', '/mode', {
+      sessionId: 'codex-cloud',
+      mode: 'default',
+    });
+    expect(initial.status).toBe(200);
+    expect(initial.data.tree).toEqual({ version: 0, goals: [] });
+
     const changed = await fetchJson(port, 'POST', '/mode', {
       sessionId: 'codex-cloud',
       mode: 'progress-tree',
     });
     expect(changed.status).toBe(200);
     expect(changed.data.extractionMode).toBe('progress-tree');
+    expect(changed.data.tree).toEqual({ version: 0, goals: [] });
 
     const reverted = await fetchJson(port, 'POST', '/mode', {
       sessionId: 'codex-cloud',
@@ -206,5 +220,6 @@ describe('ProgressServer Codex sessions', () => {
     });
     expect(reverted.status).toBe(200);
     expect(reverted.data.extractionMode).toBe('default');
+    expect(reverted.data.tree).toEqual({ version: 0, goals: [] });
   });
 });

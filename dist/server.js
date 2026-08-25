@@ -395,6 +395,9 @@ export class ProgressServer {
             res.end(JSON.stringify({ error: 'Session not found' }));
             return;
         }
+        if (session.extractionMode !== body.mode) {
+            session.store.setState({ version: 0, goals: [] });
+        }
         session.extractionMode = body.mode;
         session.store.setExtractionMode(body.mode);
         this.createSessionExtractor(session);
@@ -441,7 +444,10 @@ export class ProgressServer {
         this.setStatus(sessionId, 'syncing');
         try {
             const turns = this.getSessionTurns(session);
-            const updated = await extractor.extract(session.store.getState(), turns, (progressTree) => {
+            const inputTree = session.extractionMode === 'progress-tree'
+                ? { version: 0, goals: [] }
+                : session.store.getState();
+            const updated = await extractor.extract(inputTree, turns, (progressTree) => {
                 session.store.setState(progressTree);
             }, this.buildTraceContext(session, 'full'));
             session.store.setState(updated);
