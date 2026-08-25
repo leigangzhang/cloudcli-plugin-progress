@@ -70,6 +70,11 @@ export type ExtractionTraceEvent =
       parsedCharacters: number;
       outputTokens: number;
       error?: string;
+      contentBlocks?: Array<{
+        type: string;
+        characters?: number;
+        text?: string;
+      }>;
     };
 
 export function estimateTokens(text: string | undefined): number {

@@ -486,6 +486,11 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       DEFAULT_MAX_OUTPUT_TOKENS,
     );
     let rawOutput = '';
+    let responseBlocks: Array<{
+      type: string;
+      characters?: number;
+      text?: string;
+    }> = [];
     try {
       const response = await this.client.messages.create({
         model: this.config.model,
@@ -511,6 +516,18 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         }),
       );
 
+      responseBlocks = response.content.map((block) =>
+        block.type === 'text'
+          ? {
+              type: block.type,
+              text: block.text,
+              characters: block.text.length,
+            }
+          : {
+              type: block.type,
+              text: JSON.stringify(block),
+            },
+      );
       rawOutput = response.content
         .map((block) => (block.type === 'text' ? block.text : ''))
         .join('');
@@ -558,6 +575,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
           outputCharacters: rawOutput.length,
           parsedCharacters: jsonText.length,
           outputTokens,
+          contentBlocks: responseBlocks,
         });
       }
 
@@ -574,6 +592,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
           parsedCharacters: 0,
           outputTokens: 0,
           error: message,
+          contentBlocks: responseBlocks,
         });
         this.trace({
           type: 'usage',
