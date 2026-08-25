@@ -375,7 +375,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(client.messages.create).toHaveBeenCalledTimes(1);
   });
 
-  it('caps output tokens at 4096', async () => {
+  it('caps output tokens at 8192', async () => {
     const client = mockClient({
       text: patchResponse(1, [
         {
@@ -389,12 +389,12 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
       ]),
     });
     const engine = new LLMExtractionEngineImpl({
-      config: { ...mockConfig(), maxTokens: 8092 },
+      config: { ...mockConfig(), maxTokens: 16384 },
       client,
     });
     await engine.extract({ version: 0, goals: [] }, [turn()]);
     expect(client.messages.create).toHaveBeenCalledWith(
-      expect.objectContaining({ max_tokens: 4096 }),
+      expect.objectContaining({ max_tokens: 8192 }),
     );
   });
 
