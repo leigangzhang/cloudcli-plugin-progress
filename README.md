@@ -196,7 +196,7 @@ The log directory is created automatically. Each extraction emits:
 - `conversation`: the normalized Codex turns before LLM filtering, including `thinkingText` and `toolText`.
 - `prompt`: the exact prompt sent for each LLM attempt or polling chunk.
 - `usage`: actual `inputTokens`, `outputTokens`, and cache token fields returned by the API.
-- `response`: complete raw model output, response content block types, output characters, parsed JSON characters, and output tokens.
+- `response`: complete serialized SDK response, raw model output, response content block types, output characters, parsed JSON characters, and output tokens.
 
 Extraction error events are written to the log even when full trace logging is disabled.
 
