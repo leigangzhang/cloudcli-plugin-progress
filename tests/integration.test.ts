@@ -93,7 +93,9 @@ describe('ProgressServer end-to-end', () => {
 
     const { status, data } = await fetchJson(port, 'POST', '/watch', { projectPath, sessionId });
     expect(status).toBe(200);
-    expect((data as { tree: { goals: unknown[] } }).tree.goals).toEqual([]);
+    const watched = data as { tree: ProgressTree };
+    expect(watched.tree.goals[0]?.subject).toBe('User queries');
+    expect(watched.tree.goals[0]?.steps?.[0]?.subject).toBe('Hello');
 
     appendJsonl(logFile, [
       {
@@ -101,13 +103,15 @@ describe('ProgressServer end-to-end', () => {
         uuid: 'a1',
         parentUuid: 'u1',
         promptId: 'p1',
-        content: [{ type: 'thinking', thinking: 'I need to plan the implementation.' }],
+        content: [
+          { type: 'thinking', thinking: 'I need to plan the implementation.' },
+          { type: 'text', text: 'Plan complete.' },
+        ],
         stopReason: 'end_turn',
       },
     ]);
 
     await wait(400);
-    expect(mockExtractor.extract).toHaveBeenCalled();
 
     const { data: progressData } = await fetchJson(
       port,
@@ -116,8 +120,7 @@ describe('ProgressServer end-to-end', () => {
     );
     const progress = progressData as { tree: ProgressTree; status: string };
     expect(progress.status).toBe('idle');
-    expect(progress.tree.goals).toHaveLength(1);
-    expect(progress.tree.goals[0].subject).toBe('Integrated goal');
+    expect(progress.tree.goals[0]?.steps?.[0]?.status).toBe('completed');
   });
 
   it('broadcasts progress updates over WebSocket after file changes', async () => {
@@ -167,7 +170,8 @@ describe('ProgressServer end-to-end', () => {
     const progressMessages = messages.filter((m) => (m as { type: string }).type === 'progress');
     expect(progressMessages.length).toBeGreaterThanOrEqual(1);
     const latest = progressMessages[progressMessages.length - 1] as { tree: ProgressTree };
-    expect(latest.tree.goals[0].subject).toBe('Integrated goal');
+    expect(latest.tree.goals[0].subject).toBe('User queries');
+    expect(latest.tree.goals[0].steps?.[0]?.subject).toBe('Update progress');
 
     ws.close();
   });
@@ -186,7 +190,7 @@ describe('ProgressServer end-to-end', () => {
       'GET',
       `/progress?sessionId=${encodeURIComponent(sessionId)}`,
     );
-    expect((before.data as { tree: { goals: unknown[] } }).tree.goals).toEqual([]);
+    expect((before.data as { tree: ProgressTree }).tree.goals).toEqual([]);
 
     appendJsonl(logFile, [
       { type: 'user', uuid: 'u3', promptId: 'p3', content: [{ type: 'text', text: 'Do it' }] },
@@ -195,6 +199,11 @@ describe('ProgressServer end-to-end', () => {
 
     const after = await fetchJson(port, 'POST', '/refresh', { sessionId });
     expect(after.status).toBe(200);
-    expect((after.data as { tree: { goals: unknown[] } }).tree.goals).toHaveLength(1);
+    expect(
+      (after.data as { tree: ProgressTree }).tree.goals[0]?.subject,
+    ).toBe('User queries');
+    expect(
+      (after.data as { tree: ProgressTree }).tree.goals[0]?.steps?.[0]?.subject,
+    ).toBe('Do it');
   });
 });

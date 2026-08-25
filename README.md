@@ -13,7 +13,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
 - **Default query extraction** — Default mode extracts user queries locally without calling an LLM and displays them as a flat, numbered list instead of wrapping them under a goal.
 - **ProgressTree extraction** — Optional LLM mode uses a compact tree digest plus user text and a short assistant summary to update only affected nodes through a local patch merge.
-- **Snapshot persistence** — After every extraction the progress tree is saved to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. CloudCLI / plugin restarts load the snapshot first and continue incrementally.
+- **Snapshot persistence** — ProgressTree mode saves the LLM-generated tree to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. Default mode reconstructs user queries directly from the conversation and does not write snapshots.
 - **Five-turn polling** — ProgressTree sessions are processed in 5-turn chunks. Incremental triggers only send turns that do not yet have a progress step.
 - **Codex rollout parsing** — Codex turns are grouped by `turn_id`, including user messages, summarized reasoning, assistant output, and tool calls. V1 tracks the mapped root thread; spawned subagent rollouts are not merged automatically.
 - **WebSocket live updates** — Progress and status changes are pushed to the UI without polling.
@@ -158,7 +158,9 @@ ProgressTree extraction works in 5-turn chunks:
 4. The server merges patches locally, preserving omitted nodes and applying explicit deletions.
 5. Intermediate trees are saved and broadcast to the UI via WebSocket.
 
-Manual `/refresh` processes the complete session log in 5-turn chunks using the active mode.
+Manual `/refresh` restarts from the first conversation turn using the active mode.
+
+Mode switching preserves ProgressTree snapshots. Switching from Default to ProgressTree loads the saved LLM tree and processes only turns missing from it. Switching back to Default saves the current ProgressTree snapshot first, then reconstructs the flat user-query view from the conversation log.
 
 ## Troubleshooting
 

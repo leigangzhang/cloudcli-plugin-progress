@@ -79,10 +79,10 @@ export class ProgressServer {
         });
     }
     chooseExtractor(session) {
-        if (this.options.extractor)
-            return this.options.extractor;
         if (session.extractionMode === 'default')
             return this.ruleExtractor;
+        if (this.options.extractor)
+            return this.options.extractor;
         return session.extractor ?? this.extractor;
     }
     createSessionExtractor(session) {
@@ -113,24 +113,7 @@ export class ProgressServer {
     }
     bindDetector(session) {
         session.detector.onTrigger(async () => {
-            const extractor = this.chooseExtractor(session);
-            if (!extractor)
-                return;
-            const turns = this.getPendingTurns(session, this.getSessionTurns(session));
-            if (turns.length === 0)
-                return;
-            this.setStatus(session.sessionId, 'syncing');
-            try {
-                const updated = await extractor.extract(session.store.getState(), turns, undefined, this.buildTraceContext(session, 'incremental'));
-                session.store.setState(updated);
-                this.setStatus(session.sessionId, 'idle');
-            }
-            catch (err) {
-                const message = err.message;
-                const apiKey = session.extractor ? this.config.apiKey : this.config.apiKey;
-                console.error('Extraction failed:', redactApiKey(message, apiKey));
-                this.setStatus(session.sessionId, 'error', message);
-            }
+            await this.runExtraction(session, session.extractionMode === 'default');
         });
     }
     migrateClients(fromSessionId, toSessionId) {
@@ -164,6 +147,40 @@ export class ProgressServer {
             }
         }
         return turns.filter((turn) => !processedPromptIds.has(turn.promptId));
+    }
+    async runExtraction(session, fullRebuild) {
+        const extractor = this.chooseExtractor(session);
+        if (!extractor)
+            return;
+        const allTurns = this.getSessionTurns(session);
+        const turns = fullRebuild
+            ? allTurns
+            : this.getPendingTurns(session, allTurns);
+        if (turns.length === 0)
+            return;
+        this.setStatus(session.sessionId, 'syncing');
+        const inputTree = fullRebuild && session.extractionMode === 'progress-tree'
+            ? { version: 0, goals: [] }
+            : session.store.getState();
+        try {
+            const updated = await extractor.extract(inputTree, turns, (progressTree) => {
+                session.store.setState(progressTree);
+            }, this.buildTraceContext(session, fullRebuild ? 'full' : 'incremental'));
+            session.store.setState(updated);
+            this.setStatus(session.sessionId, 'idle');
+            if (session.extractionMode === 'progress-tree') {
+                session.store.saveSnapshot(session.sessionId);
+            }
+        }
+        catch (err) {
+            const message = err.message;
+            const apiKey = session.extractor ? this.config.apiKey : this.config.apiKey;
+            console.error('Extraction failed:', redactApiKey(message, apiKey));
+            this.setStatus(session.sessionId, 'error', message);
+        }
+    }
+    async initializeSessionTree(session) {
+        await this.runExtraction(session, session.extractionMode === 'default');
     }
     buildTraceContext(session, mode) {
         return {
@@ -230,6 +247,9 @@ export class ProgressServer {
                 if (!logPath || !fs.existsSync(logPath)) {
                     this.setStatus(realSessionId, 'error', `Session log not found: ${logPath || realSessionId}`);
                 }
+                else {
+                    await this.runExtraction(session, true);
+                }
             }
             return session;
         }
@@ -259,10 +279,15 @@ export class ProgressServer {
             store.setState({ version: 0, goals: [] });
         }
         session.extractionMode = store.getExtractionMode();
+        if (session.extractionMode === 'default') {
+            store.setState({ version: 0, goals: [] });
+        }
         this.createSessionExtractor(session);
         this.bindDetector(session);
         session.store.subscribe((tree) => this.broadcast(realSessionId, { type: 'progress', tree }));
         session.store.subscribe(() => {
+            if (session.extractionMode !== 'progress-tree')
+                return;
             try {
                 session.store.saveSnapshot(realSessionId);
             }
@@ -276,6 +301,7 @@ export class ProgressServer {
             }
             session.detector.ingest(entry);
         });
+        this.sessions.set(realSessionId, session);
         await watcher.startWithPath(resolved.logPath);
         const logPath = watcher.getFilePath();
         if (!logPath || !fs.existsSync(logPath)) {
@@ -286,7 +312,7 @@ export class ProgressServer {
             session.status = 'idle';
             session.errorMessage = undefined;
         }
-        this.sessions.set(realSessionId, session);
+        await this.initializeSessionTree(session);
         return session;
     }
     resolveSessionId(requestedSessionId) {
@@ -395,24 +421,40 @@ export class ProgressServer {
             res.end(JSON.stringify({ error: 'Session not found' }));
             return;
         }
-        if (session.extractionMode !== body.mode) {
-            session.store.setState({ version: 0, goals: [] });
+        if (session.extractionMode === body.mode) {
+            const response = this.buildProgressResponse(session);
+            res.writeHead(200);
+            res.end(JSON.stringify(response));
+            return;
+        }
+        if (session.extractionMode === 'progress-tree') {
+            try {
+                session.store.saveSnapshot(sessionId);
+            }
+            catch (err) {
+                console.error('Failed to save snapshot:', err.message);
+            }
+        }
+        if (body.mode === 'progress-tree') {
+            const hasProgressSnapshot = session.store.loadSnapshot(sessionId) &&
+                session.store.getExtractionMode() === 'progress-tree';
+            if (!hasProgressSnapshot) {
+                session.store.setExtractionMode('progress-tree');
+                session.store.setState({ version: 0, goals: [] });
+            }
         }
         session.extractionMode = body.mode;
         session.store.setExtractionMode(body.mode);
         this.createSessionExtractor(session);
-        try {
-            session.store.saveSnapshot(sessionId);
-        }
-        catch (err) {
-            console.error('Failed to save snapshot:', err.message);
-        }
         if (body.mode === 'progress-tree' &&
             !this.chooseExtractor(session)) {
             this.setStatus(sessionId, 'error', 'Missing API key. Set ANTHROPIC_API_KEY in project .env or plugin environment.');
         }
+        else if (body.mode === 'progress-tree') {
+            await this.runExtraction(session, false);
+        }
         else {
-            this.setStatus(sessionId, 'idle');
+            await this.runExtraction(session, true);
         }
         const response = this.buildProgressResponse(session);
         res.writeHead(200);
@@ -441,28 +483,9 @@ export class ProgressServer {
             res.end(JSON.stringify({ error: 'Missing API key. Set ANTHROPIC_API_KEY in project .env or plugin environment.' }));
             return;
         }
-        this.setStatus(sessionId, 'syncing');
-        try {
-            const turns = this.getSessionTurns(session);
-            const inputTree = session.extractionMode === 'progress-tree'
-                ? { version: 0, goals: [] }
-                : session.store.getState();
-            const updated = await extractor.extract(inputTree, turns, (progressTree) => {
-                session.store.setState(progressTree);
-            }, this.buildTraceContext(session, 'full'));
-            session.store.setState(updated);
+        await this.runExtraction(session, true);
+        if (session.status !== 'error') {
             this.setStatus(sessionId, 'idle');
-            try {
-                session.store.saveSnapshot(sessionId);
-            }
-            catch (err) {
-                console.error('Failed to save snapshot:', err.message);
-            }
-        }
-        catch (err) {
-            const message = err.message;
-            console.error('Refresh failed:', redactApiKey(message, this.config.apiKey));
-            this.setStatus(sessionId, 'error', message);
         }
         const response = this.buildProgressResponse(session);
         res.writeHead(200);
