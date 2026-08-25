@@ -208,6 +208,9 @@ describe('ProgressServer without API key', () => {
     expect(response.status).toBe('idle');
     expect(response.extractionMode).toBe('default');
     expect(response.error).toBeUndefined();
+    expect(
+      fs.existsSync(path.join(tmp.path, 'snapshots', `${sessionId}.json`)),
+    ).toBe(false);
   });
 
   it('reports a missing API key when switching to progress-tree mode', async () => {
