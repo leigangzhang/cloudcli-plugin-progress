@@ -398,13 +398,15 @@ export class LLMExtractionEngineImpl {
         let rawResponse = '';
         let responseBlocks = [];
         try {
-            const response = await this.client.messages.create({
+            const requestParams = {
                 model: this.config.model,
                 max_tokens: maxTokens,
                 temperature: 0,
                 system: SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: prompt }],
-            });
+                thinking: { type: 'disabled' },
+            };
+            const response = await this.client.messages.create(requestParams);
             const usage = response.usage;
             const outputTokens = usage?.output_tokens ?? 0;
             if (traceContext && this.trace) {

@@ -12,7 +12,7 @@ A CloudCLI tab plugin that automatically extracts and visualizes progress from C
 - **Local conversation records** — Step details are read from the local `.jsonl` file and rendered as Markdown. No raw conversation text is returned by the LLM.
 - **Real-time sync** — Incrementally watches the session `.jsonl` via `fs.watch` and triggers extraction as new messages arrive.
 - **Default query extraction** — Default mode extracts user queries locally without calling an LLM and displays them as a flat, numbered list instead of wrapping them under a goal.
-- **ProgressTree extraction** — Optional LLM mode uses a compact tree digest plus user text and a short assistant summary to update only affected nodes through a local patch merge.
+- **ProgressTree extraction** — Optional LLM mode uses a compact tree digest plus user text and a short assistant summary to update only affected nodes through a local patch merge. Thinking mode is disabled on DeepSeek-compatible endpoints.
 - **Snapshot persistence** — ProgressTree mode saves the LLM-generated tree to `~/.claude-code-ui/plugins/cloudcli-plugin-progress/.snapshots/<sessionId>.json`. Default mode reconstructs user queries directly from the conversation and does not write snapshots.
 - **Five-turn polling** — ProgressTree sessions are processed in 5-turn chunks. Incremental triggers only send turns that do not yet have a progress step.
 - **Codex rollout parsing** — Codex turns are grouped by `turn_id`, including user messages, summarized reasoning, assistant output, and tool calls. V1 tracks the mapped root thread; spawned subagent rollouts are not merged automatically.
