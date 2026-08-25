@@ -15,14 +15,15 @@ Return a ProgressTreePatch object only:
 }
 
 Rules:
-1. Do not return the full progress tree. Return only goals and steps affected by the supplied turns.
+1. Only the most recent goal is provided. Previous goals are closed and must not be revisited.
 2. Each upsert goal must contain its stable "id". Include affected steps only; unchanged steps may be omitted.
 3. For existing goals or steps, unchanged fields may be omitted; the server fills them from the current tree. New nodes must contain a non-empty "id", exact "promptId", "subject", "description", and "status".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
 6. Keep each subject under 80 characters and each description under 120 characters. Do not restate the turn text. Omit unchanged fields for existing nodes.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
-8. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
+8. Do not analyze completed history or produce a planning narrative. Only decide whether each turn continues the latest goal or starts a new goal.
+9. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
 function isObject(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -54,16 +55,19 @@ function truncateText(value, maxLength) {
     return `${value.slice(0, maxLength)}\n...[truncated]`;
 }
 function buildTreeDigest(tree) {
-    return tree.goals.map((goal) => ({
-        id: goal.id,
-        subject: truncateText(goal.subject, 120) ?? goal.subject,
-        status: goal.status,
-        steps: (goal.steps ?? []).map((step) => ({
-            id: step.id,
-            promptId: step.promptId,
-            status: step.status,
-        })),
-    }));
+    const latestGoal = tree.goals[tree.goals.length - 1];
+    if (!latestGoal)
+        return [];
+    return [{
+            id: latestGoal.id,
+            subject: truncateText(latestGoal.subject, 120) ?? latestGoal.subject,
+            status: latestGoal.status,
+            steps: (latestGoal.steps ?? []).map((step) => ({
+                id: step.id,
+                promptId: step.promptId,
+                status: step.status,
+            })),
+        }];
 }
 function buildTurnInput(turn) {
     return {
