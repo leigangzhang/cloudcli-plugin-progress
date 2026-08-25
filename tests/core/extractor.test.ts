@@ -441,7 +441,10 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     });
     await engine.extract({ version: 0, goals: [] }, [turn()]);
     expect(client.messages.create).toHaveBeenCalledWith(
-      expect.objectContaining({ max_tokens: 8192 }),
+      expect.objectContaining({
+        max_tokens: 8192,
+        thinking: { type: 'disabled' },
+      }),
     );
   });
 
