@@ -48,6 +48,7 @@ export class ProgressServer {
                     ? new LLMExtractionEngineImpl({
                         config: this.config,
                         trace: (event) => this.traceExtraction(event),
+                        similaritySplitting: true,
                     })
                     : undefined);
         return new Promise((resolve, reject) => {
@@ -96,6 +97,7 @@ export class ProgressServer {
                 session.extractor = new LLMExtractionEngineImpl({
                     config: this.options.config,
                     trace: (event) => this.traceExtraction(event),
+                    similaritySplitting: true,
                 });
             }
             return;
@@ -105,6 +107,7 @@ export class ProgressServer {
             session.extractor = new LLMExtractionEngineImpl({
                 config: sessionConfig,
                 trace: (event) => this.traceExtraction(event),
+                similaritySplitting: true,
             });
         }
         catch {
