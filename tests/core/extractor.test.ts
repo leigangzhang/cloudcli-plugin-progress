@@ -40,7 +40,14 @@ function patchResponse(
 ): string {
   return JSON.stringify({
     version,
-    upsertGoals: goals,
+    upsertGoals: goals.map((goal) => ({
+      ...goal,
+      description: typeof goal.description === 'string' ? goal.description : '',
+      steps: goal.steps?.map((step) => ({
+        ...step,
+        description: typeof step.description === 'string' ? step.description : '',
+      })),
+    })),
     deleteGoalIds: [],
     deleteStepIds: [],
     ...extras,
@@ -174,14 +181,13 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result).toEqual(fullTree);
   });
 
-  it('includes userText and assistant summary but excludes raw thinking and tool text', async () => {
+  it('includes first 1000 characters of user text and assistant summary but excludes raw thinking and tool text', async () => {
     const tree: ProgressTree = {
       version: 1,
       goals: [
         {
           id: 'g1',
           subject: 'Existing',
-          description: 'history description should not be sent',
           status: 'pending',
         },
       ],
@@ -211,15 +217,15 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
       .messages[0].content as string;
     expect(prompt).toContain('question');
-    expect(prompt).toContain('a'.repeat(500));
-    expect(prompt).toContain('[truncated]');
+    expect(prompt).toContain('a'.repeat(1000));
+    expect(prompt).not.toContain('a'.repeat(1001));
+    expect(prompt).not.toContain('[truncated]');
     expect(prompt).not.toContain('private thinking');
     expect(prompt).not.toContain('private tool');
-    expect(prompt).not.toContain('history description should not be sent');
     expect(prompt).not.toContain(longReply);
   });
 
-  it('sends only the latest goal digest', async () => {
+  it('sends only the latest goal and latest step with full descriptions', async () => {
     const tree: ProgressTree = {
       version: 2,
       goals: [
@@ -234,9 +240,17 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
         {
           id: 'latest-goal',
           subject: 'Current work',
+          description: 'Goal description',
           status: 'in_progress',
           steps: [
-            { id: 'current-step', subject: 'Current', status: 'pending', promptId: 'current' },
+            { id: 'older-step', subject: 'Older', status: 'completed', promptId: 'older' },
+            {
+              id: 'latest-step',
+              subject: 'Current',
+              description: 'Latest step description',
+              status: 'pending',
+              promptId: 'current',
+            },
           ],
         },
       ],
@@ -246,9 +260,16 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
         {
           id: 'latest-goal',
           subject: 'Current work',
+          description: 'Goal description',
           status: 'completed',
           steps: [
-            { id: 'current-step', subject: 'Current', status: 'completed', promptId: 'current' },
+            {
+              id: 'latest-step',
+              subject: 'Current',
+              description: 'Latest step description',
+              status: 'completed',
+              promptId: 'current',
+            },
           ],
         },
       ]),
@@ -258,10 +279,14 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     const prompt = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0]
       .messages[0].content as string;
     expect(prompt).toContain('latest-goal');
-    expect(prompt).toContain('current-step');
+    expect(prompt).toContain('Goal description');
+    expect(prompt).toContain('latest-step');
+    expect(prompt).toContain('Latest step description');
     expect(prompt).not.toContain('old-goal');
     expect(prompt).not.toContain('old-step');
     expect(prompt).not.toContain('Closed history');
+    expect(prompt).not.toContain('older-step');
+    expect(prompt).not.toContain('[truncated]');
   });
 
   it('emits conversation, prompt, usage, and response traces', async () => {
@@ -443,12 +468,14 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(client.messages.create).toHaveBeenCalledWith(
       expect.objectContaining({
         max_tokens: 8192,
-        thinking: { type: 'disabled' },
+        thinking: { type: 'enabled' },
+        output_config: { effort: 'low' },
+        response_format: { type: 'json_object' },
       }),
     );
   });
 
-  it('repairs missing patch ids from previous nodes', async () => {
+  it('generates stable ids for missing patch ids without reusing previous nodes', async () => {
     const tree: ProgressTree = {
       version: 1,
       goals: [
@@ -467,33 +494,42 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
         {
           id: '',
           subject: 'Existing',
+          description: 'Goal description',
           status: 'completed',
           steps: [
-            { id: '', subject: 'Updated', status: 'completed', promptId: 'p1' },
+            {
+              id: '',
+              subject: 'Updated',
+              description: 'Step description',
+              status: 'completed',
+              promptId: 'p1',
+            },
           ],
         },
       ]),
     });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
     const result = await engine.extract(tree, [turn()]);
-    expect(result.goals[0].id).toBe('g1');
-    expect(result.goals[0].steps?.[0].id).toBe('s1');
+    expect(result.goals.map((goal) => goal.id)).toContain('g1');
+    const newGoal = result.goals.find((goal) => goal.id !== 'g1');
+    expect(newGoal).toBeDefined();
+    expect(newGoal!.id).not.toBe('g1');
+    expect(newGoal!.steps?.[0].id).not.toBe('s1');
+    expect(newGoal!.steps?.[0].promptId).toBe('p1');
   });
 
-  it('fills omitted patch fields from existing nodes', async () => {
+  it('rejects affected nodes that omit required description fields', async () => {
     const tree: ProgressTree = {
       version: 1,
       goals: [
         {
           id: 'g1',
-          subject: 'Existing subject',
-          description: 'Existing description',
+          subject: 'Existing',
           status: 'in_progress',
           steps: [
             {
               id: 's1',
-              subject: 'Existing step subject',
-              description: 'Existing step description',
+              subject: 'Existing step',
               status: 'pending',
               promptId: 'p1',
             },
@@ -502,28 +538,23 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
       ],
     };
     const client = mockClient({
-      text: patchResponse(2, [
-        {
-          id: 'g1',
-          subject: '',
-          status: '' as ProgressGoal['status'],
-          steps: [
-            {
-              id: 's1',
-              subject: '',
-              status: '' as ProgressStep['status'],
-              promptId: '',
-            },
-          ],
-        },
-      ]),
+      text: JSON.stringify({
+        version: 2,
+        upsertGoals: [
+          {
+            id: 'g1',
+            subject: 'Existing',
+            status: 'completed',
+            steps: [
+              { id: 's1', subject: 'Done', status: 'completed', promptId: 'p1' },
+            ],
+          },
+        ],
+        deleteGoalIds: [],
+        deleteStepIds: [],
+      }),
     });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
-    const result = await engine.extract(tree, [turn()]);
-    expect(result.goals[0].subject).toBe('Existing subject');
-    expect(result.goals[0].status).toBe('in_progress');
-    expect(result.goals[0].steps?.[0].subject).toBe('Existing step subject');
-    expect(result.goals[0].steps?.[0].status).toBe('pending');
-    expect(result.goals[0].steps?.[0].promptId).toBe('p1');
+    await expect(engine.extract(tree, [turn()])).rejects.toThrow(/description must be a string/);
   });
 });
