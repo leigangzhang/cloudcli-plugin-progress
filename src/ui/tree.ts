@@ -24,18 +24,18 @@ export function renderProgressTree(
   colors: ThemeColors,
 ): string {
   if (tree.goals.length === 0) {
-    return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No goals tracked yet.</div>`;
+    return `<div class="pp-tree-empty" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:28px 16px;text-align:center;color:${colors.muted};font-size:0.78rem;">No goals tracked yet.</div>`;
   }
   if (options.extractionMode === 'default') {
     const steps = tree.goals.flatMap((goal) => goal.steps ?? []);
     if (steps.length === 0) {
-      return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No queries tracked yet.</div>`;
+      return `<div class="pp-tree-empty" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:28px 16px;text-align:center;color:${colors.muted};font-size:0.78rem;">No queries tracked yet.</div>`;
     }
-    return `<div class="pp-tree pp-tree-flat" style="display:flex;flex-direction:column;gap:8px;padding:2px 0;">${steps
-      .map((step, index) => renderStep(step, options, colors, index + 1))
+    return `<div class="pp-tree pp-tree-flat" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;overflow:hidden;">${steps
+      .map((step, index) => renderStep(step, options, colors, index + 1, false))
       .join('')}</div>`;
   }
-  return `<div class="pp-tree" style="display:flex;flex-direction:column;gap:8px;">${tree.goals
+  return `<div class="pp-tree" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;overflow:hidden;">${tree.goals
     .map((goal) => renderGoal(goal, options, colors))
     .join('')}</div>`;
 }
@@ -47,10 +47,10 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
   const description = goal.description ? escapeHtml(goal.description) : '';
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml(goal.id)}">
-      <div class="pp-goal-header" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.dim}'" onmouseout="this.style.background='${colors.surface}'">
-        <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
+      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">
+        <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-size:0.82rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${description}">${title}</span>
+        <span style="font-size:0.8rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}
     </div>
@@ -60,8 +60,8 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
 function renderSteps(goal: ProgressGoal, options: TreeRenderOptions, colors: ThemeColors): string {
   const steps = goal.steps ?? [];
   if (steps.length === 0) return '';
-  return `<div class="pp-steps" style="margin-left:20px;margin-top:4px;padding-left:10px;border-left:1px solid ${colors.border};">${steps
-    .map((step) => renderStep(step, options, colors))
+  return `<div class="pp-steps" style="margin:0 12px 4px 28px;padding:4px 0 4px 12px;border-left:1px solid ${colors.divider};">${steps
+    .map((step) => renderStep(step, options, colors, undefined, true))
     .join('')}</div>`;
 }
 
@@ -70,21 +70,31 @@ function renderStep(
   options: TreeRenderOptions,
   colors: ThemeColors,
   sequence?: number,
+  embedded = false,
 ): string {
   const expanded = options.turnExpanded.has(step.id);
   const title = escapeHtml(step.subject);
-  const completedIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-  const pendingIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>`;
-  const icon = step.status === 'completed' ? completedIcon : pendingIcon;
+  const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+  const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
+  const icon = step.status === 'completed'
+    ? `<span style="color:${colors.success};display:inline-flex;">${completedIcon}</span>`
+    : `<span style="color:${colors.muted};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : '';
   const sequenceLabel = sequence
     ? `<span style="width:18px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.72rem;">${sequence}.</span>`
     : '';
+  const rowStyle = embedded
+    ? 'padding:6px 0;'
+    : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
+  const hover = embedded
+    ? ''
+    : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
+  const stepRowBackground = embedded ? 'background:transparent;' : `background:${colors.surface};`;
   return `
-    <div class="pp-step" data-step-id="${escapeHtml(step.id)}" data-prompt-id="${escapeHtml(step.promptId)}">
-      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;">
+    <div class="pp-step" data-step-id="${escapeHtml(step.id)}" data-prompt-id="${escapeHtml(step.promptId)}" style="${stepRowBackground}">
+      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;transition:background 0.15s;" ${hover}>
         ${sequenceLabel}
-        <span style="display:inline-flex;width:10px;height:10px;flex-shrink:0;color:${colors.muted};">${icon}</span>
+        <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
         <span style="font-size:0.76rem;color:${colors.text};opacity:0.9;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
       </div>
       ${panel}
@@ -95,7 +105,7 @@ function renderStep(
 function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors: ThemeColors): string {
   const turn = options.turnRecords.get(step.promptId);
   if (!turn) {
-    return `<div style="margin-left:18px;padding:8px;color:${colors.muted};font-size:0.7rem;">Loading conversation...</div>`;
+    return `<div style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-radius:6px;background:${colors.surfaceHover};color:${colors.muted};font-size:0.72rem;">Loading conversation...</div>`;
   }
   const userBlock = renderBlock('User question', turn.userText, colors);
   const assistantBlock = turn.assistantText
@@ -104,7 +114,7 @@ function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors:
   const reasoningBlock = renderPlainDetails('Model reasoning', turn.thinkingText, colors);
   const toolBlock = renderPlainDetails('Tool activity', turn.toolText, colors);
   return `
-    <div class="pp-turn-panel" style="margin-left:18px;margin-bottom:8px;padding:10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};" onclick="event.stopPropagation();">
+    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-radius:6px;background:${colors.accentSoft};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${toolBlock}
@@ -133,7 +143,7 @@ function renderPlainDetails(
   return `
     <details style="margin:6px 0;color:${colors.text};">
       <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">${escapeHtml(label)} (${sizeLabel} characters)</summary>
-      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.dim};border-radius:4px;font-size:0.72rem;line-height:1.45;">${escapeHtml(text)}</pre>
+      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.surfaceHover};border-radius:6px;font-size:0.72rem;line-height:1.5;">${escapeHtml(text)}</pre>
     </details>
   `;
 }

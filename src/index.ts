@@ -11,38 +11,38 @@ import { refreshIcon } from './ui/icons.js';
 import { themeColors } from './ui/theme.js';
 import { renderProgressTree } from './ui/tree.js';
 
-const FONT = "'JetBrains Mono', 'Fira Code', ui-monospace, monospace";
+const FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
 
 function ensureAssets(): void {
   if (typeof document === 'undefined') return;
-  if (document.getElementById('pp-font')) return;
-
-  const link = document.createElement('link');
-  link.id = 'pp-font';
-  link.rel = 'stylesheet';
-  link.href =
-    'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap';
-  document.head.appendChild(link);
+  if (document.getElementById('pp-style')) return;
 
   const style = document.createElement('style');
+  style.id = 'pp-style';
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
+    .pp-mode-control { display:inline-flex; align-items:center; gap:2px; padding:2px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:6px; }
+    .pp-mode-option { display:inline-flex; }
+    .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
+    .pp-mode-option span { padding:3px 10px; border-radius:4px; font-size:0.7rem; line-height:1.4; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s; }
+    .pp-mode-option input:checked + span { background:var(--pp-accentSoft); color:var(--pp-accent); font-weight:500; }
     .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
     .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
     .pp-markdown h1 { font-size: 1.1em; }
     .pp-markdown h2 { font-size: 1em; }
     .pp-markdown h3 { font-size: 0.95em; }
-    .pp-markdown pre { background: var(--pp-dim); padding: 8px; border-radius: 4px; overflow: auto; margin: 0.5em 0; }
+    .pp-markdown pre { background: var(--pp-surfaceHover); padding: 10px; border-radius: 6px; overflow: auto; margin: 0.5em 0; }
     .pp-markdown pre code { background: transparent; padding: 0; }
-    .pp-markdown code { font-family: inherit; background: var(--pp-dim); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+    .pp-markdown code { font-family: inherit; background: var(--pp-surfaceHover); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
     .pp-markdown a { color: var(--pp-accent); text-decoration: none; }
     .pp-markdown a:hover { text-decoration: underline; }
     .pp-markdown ul, .pp-markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
     .pp-markdown li { margin: 0.2em 0; }
-    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 8px; margin: 0.5em 0; color: var(--pp-muted); }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 10px; margin: 0.5em 0; color: var(--pp-muted); }
     .pp-markdown table { border-collapse: collapse; margin: 0.5em 0; }
-    .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 4px 8px; }
+    .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 5px 8px; }
     @keyframes pp-spin { to { transform: rotate(360deg); } }
     .pp-spin { display: inline-flex; animation: pp-spin 1s linear infinite; }
   `;
@@ -97,24 +97,24 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     const refreshLabel = isRefreshing ? 'Refreshing...' : 'Refresh';
     const refreshDisabled = isRefreshing ? 'opacity:0.6;cursor:not-allowed;' : '';
-    const refreshHover = isRefreshing ? '' : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
+    const refreshHover = isRefreshing ? '' : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
     const iconClass = isRefreshing ? 'pp-spin' : '';
     const modeControl = `
-      <div class="pp-mode-control" style="display:flex;align-items:center;gap:12px;">
+      <div class="pp-mode-control">
         ${(['default', 'progress-tree'] as ExtractionMode[]).map((mode) => {
           const active = mode === extractionMode;
           const label = mode === 'default' ? 'Default' : 'ProgressTree';
-          return `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;color:${colors.text};cursor:pointer;"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? 'checked' : ''} style="accent-color:${colors.accent};margin:0;"><span>${label}</span></label>`;
+          return `<label class="pp-mode-option"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? 'checked' : ''}><span>${label}</span></label>`;
         }).join('')}
       </div>
     `;
     const header = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+          <div style="font-size:0.92rem;font-weight:600;color:${colors.text};">Progress</div>
           ${modeControl}
-          <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
         </div>
-        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
           <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
         </button>
       </div>

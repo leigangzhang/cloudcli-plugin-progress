@@ -17,50 +17,48 @@ function parseJsonLine(line) {
 
 // src/ui/icons.ts
 function chevronRight() {
-  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
 }
 function chevronDown() {
-  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-}
-function checkIcon() {
-  return `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-}
-function circleIcon() {
-  return `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
 }
 function refreshIcon() {
-  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg>`;
 }
 function alertIcon() {
-  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
 }
 
 // src/ui/error.ts
 function renderLoading(colors) {
   return `
-     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:50%;gap:12px;color:${colors.muted};">
-       <div style="width:18px;height:18px;border:2px solid ${colors.border};border-top-color:${colors.accent};border-radius:50%;animation:pp-spin 1s linear infinite;"></div>
-       <div style="font-size:0.72rem;letter-spacing:0.05em;">Loading progress...</div>
-     </div>
-     <style>@keyframes pp-spin { to { transform: rotate(360deg); } }</style>
-   `;
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:240px;gap:12px;color:${colors.muted};">
+      <div style="width:22px;height:22px;border:2px solid ${colors.divider};border-top-color:${colors.accent};border-radius:50%;animation:pp-spin 0.8s linear infinite;"></div>
+      <div style="font-size:0.78rem;">Loading progress...</div>
+    </div>
+    <style>@keyframes pp-spin { to { transform: rotate(360deg); } }</style>
+  `;
 }
 function renderError(colors, message) {
   return `
-     <div style="padding:16px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};color:${colors.danger};font-size:0.75rem;line-height:1.5;">
-       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-weight:600;">
-         ${alertIcon()} Sync error
-       </div>
-       <div style="color:${colors.text};opacity:0.85;">${escapeHtml(message)}</div>
-     </div>
-   `;
+    <div style="padding:14px 16px;border-left:3px solid ${colors.danger};border-radius:6px;background:${colors.dangerSoft};color:${colors.danger};font-size:0.76rem;line-height:1.6;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-weight:600;">
+        <span style="display:inline-flex;color:${colors.danger};">${alertIcon()}</span>
+        <span>Sync error</span>
+      </div>
+      <div style="color:${colors.text};">${escapeHtml(message)}</div>
+    </div>
+  `;
 }
 function renderEmpty(colors, message) {
   return `
-     <div style="display:flex;align-items:center;justify-content:center;height:50%;color:${colors.muted};font-size:0.72rem;text-align:center;padding:0 24px;">
-       ${escapeHtml(message)}
-     </div>
-   `;
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:240px;gap:10px;color:${colors.muted};font-size:0.78rem;text-align:center;padding:0 24px;">
+      <div style="width:34px;height:34px;border-radius:50%;background:${colors.surfaceHover};display:flex;align-items:center;justify-content:center;color:${colors.muted};">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+      </div>
+      <div>${escapeHtml(message)}</div>
+    </div>
+  `;
 }
 function escapeHtml(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -69,27 +67,39 @@ function escapeHtml(value) {
 // src/ui/theme.ts
 function themeColors(dark) {
   return dark ? {
-    bg: "#08080f",
-    surface: "#0e0e1a",
-    border: "#1a1a2c",
-    text: "#e2e0f0",
-    muted: "#52507a",
-    accent: "#fbbf24",
-    dim: "rgba(251,191,36,0.1)",
-    success: "#10b981",
-    warning: "#f59e0b",
-    danger: "#f43f5e"
+    bg: "#17171a",
+    surface: "#232326",
+    surfaceHover: "#2a2b2f",
+    border: "#333438",
+    divider: "#2e3033",
+    text: "#e5e6eb",
+    muted: "#8f959e",
+    accent: "#4c88ff",
+    dim: "#2a2b2f",
+    accentSoft: "rgba(76,136,255,0.16)",
+    success: "#34c724",
+    warning: "#ff8800",
+    danger: "#f54a45",
+    successSoft: "rgba(52,199,36,0.16)",
+    warningSoft: "rgba(255,136,0,0.16)",
+    dangerSoft: "rgba(245,74,69,0.16)"
   } : {
-    bg: "#fafaf9",
+    bg: "#f5f6f7",
     surface: "#ffffff",
-    border: "#e8e6f0",
-    text: "#0f0e1a",
-    muted: "#9490b0",
-    accent: "#d97706",
-    dim: "rgba(217,119,6,0.08)",
-    success: "#10b981",
-    warning: "#f59e0b",
-    danger: "#f43f5e"
+    surfaceHover: "#f2f3f5",
+    border: "#e5e6eb",
+    divider: "#ebedf0",
+    text: "#1f2329",
+    muted: "#646a73",
+    accent: "#3370ff",
+    dim: "#f2f3f5",
+    accentSoft: "#f0f5ff",
+    success: "#34c724",
+    warning: "#ff8800",
+    danger: "#f54a45",
+    successSoft: "rgba(52,199,36,0.10)",
+    warningSoft: "rgba(255,136,0,0.10)",
+    dangerSoft: "rgba(245,74,69,0.10)"
   };
 }
 
@@ -1341,29 +1351,29 @@ var STATUS_LABELS = {
   deleted: "Deleted"
 };
 var STATUS_COLORS = (c) => ({
-  pending: { fg: c.muted, bg: "transparent", icon: circleIcon() },
-  in_progress: { fg: c.accent, bg: c.dim, icon: circleIcon() },
-  completed: { fg: c.success, bg: "transparent", icon: checkIcon() },
-  deleted: { fg: c.danger, bg: "transparent", icon: circleIcon() }
+  pending: { fg: c.muted, bg: c.surfaceHover, dot: c.muted },
+  in_progress: { fg: c.accent, bg: c.accentSoft, dot: c.accent },
+  completed: { fg: c.success, bg: c.successSoft, dot: c.success },
+  deleted: { fg: c.danger, bg: c.dangerSoft, dot: c.danger }
 });
 function statusBadge(status, colors) {
   const style = STATUS_COLORS(colors)[status];
-  return `<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 7px;border:1px solid ${colors.border};border-radius:3px;font-size:0.62rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:${style.fg};background:${style.bg};">${style.icon}${STATUS_LABELS[status]}</span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:500;color:${style.fg};background:${style.bg};"><span style="width:6px;height:6px;border-radius:50%;background:${style.dot};flex-shrink:0;"></span>${STATUS_LABELS[status]}</span>`;
 }
 
 // src/ui/tree.ts
 function renderProgressTree(tree, options, colors) {
   if (tree.goals.length === 0) {
-    return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No goals tracked yet.</div>`;
+    return `<div class="pp-tree-empty" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:28px 16px;text-align:center;color:${colors.muted};font-size:0.78rem;">No goals tracked yet.</div>`;
   }
   if (options.extractionMode === "default") {
     const steps = tree.goals.flatMap((goal) => goal.steps ?? []);
     if (steps.length === 0) {
-      return `<div style="color:${colors.muted};font-size:0.72rem;padding:12px 0;">No queries tracked yet.</div>`;
+      return `<div class="pp-tree-empty" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:28px 16px;text-align:center;color:${colors.muted};font-size:0.78rem;">No queries tracked yet.</div>`;
     }
-    return `<div class="pp-tree pp-tree-flat" style="display:flex;flex-direction:column;gap:8px;padding:2px 0;">${steps.map((step, index) => renderStep(step, options, colors, index + 1)).join("")}</div>`;
+    return `<div class="pp-tree pp-tree-flat" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;overflow:hidden;">${steps.map((step, index) => renderStep(step, options, colors, index + 1, false)).join("")}</div>`;
   }
-  return `<div class="pp-tree" style="display:flex;flex-direction:column;gap:8px;">${tree.goals.map((goal) => renderGoal(goal, options, colors)).join("")}</div>`;
+  return `<div class="pp-tree" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;overflow:hidden;">${tree.goals.map((goal) => renderGoal(goal, options, colors)).join("")}</div>`;
 }
 function renderGoal(goal, options, colors) {
   const expanded = options.expanded.has(goal.id);
@@ -1372,10 +1382,10 @@ function renderGoal(goal, options, colors) {
   const description = goal.description ? escapeHtml2(goal.description) : "";
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml2(goal.id)}">
-      <div class="pp-goal-header" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.dim}'" onmouseout="this.style.background='${colors.surface}'">
-        <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
+      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">
+        <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-size:0.82rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${description}">${title}</span>
+        <span style="font-size:0.8rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ""}
     </div>
@@ -1384,21 +1394,24 @@ function renderGoal(goal, options, colors) {
 function renderSteps(goal, options, colors) {
   const steps = goal.steps ?? [];
   if (steps.length === 0) return "";
-  return `<div class="pp-steps" style="margin-left:20px;margin-top:4px;padding-left:10px;border-left:1px solid ${colors.border};">${steps.map((step) => renderStep(step, options, colors)).join("")}</div>`;
+  return `<div class="pp-steps" style="margin:0 12px 4px 28px;padding:4px 0 4px 12px;border-left:1px solid ${colors.divider};">${steps.map((step) => renderStep(step, options, colors, void 0, true)).join("")}</div>`;
 }
-function renderStep(step, options, colors, sequence) {
+function renderStep(step, options, colors, sequence, embedded = false) {
   const expanded = options.turnExpanded.has(step.id);
   const title = escapeHtml2(step.subject);
-  const completedIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-  const pendingIcon = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>`;
-  const icon = step.status === "completed" ? completedIcon : pendingIcon;
+  const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+  const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
+  const icon = step.status === "completed" ? `<span style="color:${colors.success};display:inline-flex;">${completedIcon}</span>` : `<span style="color:${colors.muted};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : "";
   const sequenceLabel = sequence ? `<span style="width:18px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.72rem;">${sequence}.</span>` : "";
+  const rowStyle = embedded ? "padding:6px 0;" : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
+  const hover = embedded ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
+  const stepRowBackground = embedded ? "background:transparent;" : `background:${colors.surface};`;
   return `
-    <div class="pp-step" data-step-id="${escapeHtml2(step.id)}" data-prompt-id="${escapeHtml2(step.promptId)}">
-      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;">
+    <div class="pp-step" data-step-id="${escapeHtml2(step.id)}" data-prompt-id="${escapeHtml2(step.promptId)}" style="${stepRowBackground}">
+      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;transition:background 0.15s;" ${hover}>
         ${sequenceLabel}
-        <span style="display:inline-flex;width:10px;height:10px;flex-shrink:0;color:${colors.muted};">${icon}</span>
+        <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
         <span style="font-size:0.76rem;color:${colors.text};opacity:0.9;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
       </div>
       ${panel}
@@ -1408,14 +1421,14 @@ function renderStep(step, options, colors, sequence) {
 function renderTurnPanel(step, options, colors) {
   const turn = options.turnRecords.get(step.promptId);
   if (!turn) {
-    return `<div style="margin-left:18px;padding:8px;color:${colors.muted};font-size:0.7rem;">Loading conversation...</div>`;
+    return `<div style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-radius:6px;background:${colors.surfaceHover};color:${colors.muted};font-size:0.72rem;">Loading conversation...</div>`;
   }
   const userBlock = renderBlock("User question", turn.userText, colors);
   const assistantBlock = turn.assistantText ? renderBlock("Assistant reply", turn.assistantText, colors) : renderEmptyBlock("Assistant reply", colors);
   const reasoningBlock = renderPlainDetails("Model reasoning", turn.thinkingText, colors);
   const toolBlock = renderPlainDetails("Tool activity", turn.toolText, colors);
   return `
-    <div class="pp-turn-panel" style="margin-left:18px;margin-bottom:8px;padding:10px;border:1px solid ${colors.border};border-radius:4px;background:${colors.surface};" onclick="event.stopPropagation();">
+    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-radius:6px;background:${colors.accentSoft};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${toolBlock}
@@ -1438,7 +1451,7 @@ function renderPlainDetails(label, text, colors) {
   return `
     <details style="margin:6px 0;color:${colors.text};">
       <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">${escapeHtml2(label)} (${sizeLabel} characters)</summary>
-      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.dim};border-radius:4px;font-size:0.72rem;line-height:1.45;">${escapeHtml2(text)}</pre>
+      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.surfaceHover};border-radius:6px;font-size:0.72rem;line-height:1.5;">${escapeHtml2(text)}</pre>
     </details>
   `;
 }
@@ -1459,34 +1472,35 @@ function escapeHtml2(value) {
 }
 
 // src/index.ts
-var FONT = "'JetBrains Mono', 'Fira Code', ui-monospace, monospace";
+var FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
 function ensureAssets() {
   if (typeof document === "undefined") return;
-  if (document.getElementById("pp-font")) return;
-  const link = document.createElement("link");
-  link.id = "pp-font";
-  link.rel = "stylesheet";
-  link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap";
-  document.head.appendChild(link);
+  if (document.getElementById("pp-style")) return;
   const style = document.createElement("style");
+  style.id = "pp-style";
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
+    .pp-mode-control { display:inline-flex; align-items:center; gap:2px; padding:2px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:6px; }
+    .pp-mode-option { display:inline-flex; }
+    .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
+    .pp-mode-option span { padding:3px 10px; border-radius:4px; font-size:0.7rem; line-height:1.4; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s; }
+    .pp-mode-option input:checked + span { background:var(--pp-accentSoft); color:var(--pp-accent); font-weight:500; }
     .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
     .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
     .pp-markdown h1 { font-size: 1.1em; }
     .pp-markdown h2 { font-size: 1em; }
     .pp-markdown h3 { font-size: 0.95em; }
-    .pp-markdown pre { background: var(--pp-dim); padding: 8px; border-radius: 4px; overflow: auto; margin: 0.5em 0; }
+    .pp-markdown pre { background: var(--pp-surfaceHover); padding: 10px; border-radius: 6px; overflow: auto; margin: 0.5em 0; }
     .pp-markdown pre code { background: transparent; padding: 0; }
-    .pp-markdown code { font-family: inherit; background: var(--pp-dim); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+    .pp-markdown code { font-family: inherit; background: var(--pp-surfaceHover); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
     .pp-markdown a { color: var(--pp-accent); text-decoration: none; }
     .pp-markdown a:hover { text-decoration: underline; }
     .pp-markdown ul, .pp-markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
     .pp-markdown li { margin: 0.2em 0; }
-    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 8px; margin: 0.5em 0; color: var(--pp-muted); }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 10px; margin: 0.5em 0; color: var(--pp-muted); }
     .pp-markdown table { border-collapse: collapse; margin: 0.5em 0; }
-    .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 4px 8px; }
+    .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 5px 8px; }
     @keyframes pp-spin { to { transform: rotate(360deg); } }
     .pp-spin { display: inline-flex; animation: pp-spin 1s linear infinite; }
   `;
@@ -1532,24 +1546,24 @@ function mount(container, api) {
     }
     const refreshLabel = isRefreshing ? "Refreshing..." : "Refresh";
     const refreshDisabled = isRefreshing ? "opacity:0.6;cursor:not-allowed;" : "";
-    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.borderColor='${colors.accent}'" onmouseout="this.style.borderColor='${colors.border}'"`;
+    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
     const modeControl = `
-      <div class="pp-mode-control" style="display:flex;align-items:center;gap:12px;">
+      <div class="pp-mode-control">
         ${["default", "progress-tree"].map((mode) => {
       const active = mode === extractionMode;
       const label = mode === "default" ? "Default" : "ProgressTree";
-      return `<label style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;color:${colors.text};cursor:pointer;"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? "checked" : ""} style="accent-color:${colors.accent};margin:0;"><span>${label}</span></label>`;
+      return `<label class="pp-mode-option"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? "checked" : ""}><span>${label}</span></label>`;
     }).join("")}
       </div>
     `;
     const header = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+          <div style="font-size:0.92rem;font-weight:600;color:${colors.text};">Progress</div>
           ${modeControl}
-          <div style="font-size:0.7rem;color:${colors.muted};letter-spacing:0.08em;text-transform:uppercase;">Progress</div>
         </div>
-        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:${colors.surface};border:1px solid ${colors.border};border-radius:4px;color:${colors.text};font-size:0.68rem;transition:border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
           <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
         </button>
       </div>
