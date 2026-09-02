@@ -23,7 +23,8 @@ Rules:
 6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
 8. Do not analyze completed history or produce a planning narrative. Only decide whether each turn continues the latest goal or starts a new goal.
-9. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
+9. Return goals and steps in the same order as the conversation turns.
+10. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
 function isObject(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -127,6 +128,47 @@ function repairPatchIds(patch) {
             id: goalId,
             ...(steps ? { steps } : {}),
         };
+    });
+    return { ...patch, upsertGoals };
+}
+function orderPatchByConversation(patch, turns) {
+    const turnOrder = new Map(turns.map((turn, index) => [turn.promptId, index]));
+    const firstTurnIndex = (goal) => {
+        const steps = goal.steps ?? [];
+        for (const step of steps) {
+            const index = turnOrder.get(step.promptId);
+            if (index !== undefined)
+                return index;
+        }
+        return undefined;
+    };
+    const upsertGoals = patch.upsertGoals
+        .map((goal) => ({
+        ...goal,
+        steps: goal.steps
+            ? [...goal.steps].sort((a, b) => {
+                const aIndex = turnOrder.get(a.promptId);
+                const bIndex = turnOrder.get(b.promptId);
+                if (aIndex !== undefined && bIndex !== undefined)
+                    return aIndex - bIndex;
+                if (aIndex !== undefined)
+                    return -1;
+                if (bIndex !== undefined)
+                    return 1;
+                return 0;
+            })
+            : goal.steps,
+    }))
+        .sort((a, b) => {
+        const aIndex = firstTurnIndex(a);
+        const bIndex = firstTurnIndex(b);
+        if (aIndex !== undefined && bIndex !== undefined)
+            return aIndex - bIndex;
+        if (aIndex !== undefined)
+            return -1;
+        if (bIndex !== undefined)
+            return 1;
+        return 0;
     });
     return { ...patch, upsertGoals };
 }
@@ -406,7 +448,8 @@ export class LLMExtractionEngineImpl {
             if (!isObject(parsedPatch) || !Array.isArray(parsedPatch.upsertGoals)) {
                 throw new Error('Model response must contain patch.upsertGoals');
             }
-            const patch = repairPatchIds(parsedPatch);
+            const repairedPatch = repairPatchIds(parsedPatch);
+            const patch = orderPatchByConversation(repairedPatch, turns);
             const errors = validatePatch(patch);
             if (errors.length > 0) {
                 throw new Error(`Schema validation failed: ${errors.join('; ')}`);
