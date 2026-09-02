@@ -181,6 +181,44 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result).toEqual(fullTree);
   });
 
+  it('splits oversized goals during full refresh', async () => {
+    const fullTree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Large goal',
+          description: 'Description',
+          status: 'in_progress',
+          steps: Array.from({ length: 13 }, (_, index) => ({
+            id: `s${index + 1}`,
+            subject: `Step ${index + 1}`,
+            description: 'Step description',
+            status: 'completed' as const,
+            promptId: `p${index + 1}`,
+          })),
+        },
+      ],
+    };
+    const client = mockClient({ text: JSON.stringify(fullTree) });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(
+      { version: 0, goals: [] },
+      [turn()],
+      undefined,
+      {
+        requestId: 'full-split',
+        sessionId: 'sess-split',
+        provider: 'codex',
+        mode: 'full',
+      },
+    );
+
+    expect(result.goals).toHaveLength(2);
+    expect(result.goals[0].steps).toHaveLength(12);
+    expect(result.goals[1].steps).toHaveLength(1);
+  });
+
   it('includes first 1000 characters of user text and assistant summary but excludes raw thinking and tool text', async () => {
     const tree: ProgressTree = {
       version: 1,
