@@ -404,7 +404,8 @@ function splitGoal(goal: ProgressGoal): ProgressGoal[] {
       : {
           ...goal,
           id: `${baseId}-part-${index + 1}`,
-          subject: `${baseSubject} (${index + 1})`,
+          subject: group[0]?.subject ?? baseSubject,
+          description: group[0]?.description ?? goal.description,
           steps: group,
         };
     return normalizeGoalStatus(baseGoal);
@@ -668,7 +669,8 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         return normalizeGoalStatus({
           ...goal,
           id: `${baseId}-part-${index + 1}`,
-          subject: `${baseSubject} (${index + 1})`,
+          subject: group[0]?.subject ?? baseSubject,
+          description: group[0]?.description ?? goal.description,
           steps: group,
         });
       });
