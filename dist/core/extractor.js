@@ -17,7 +17,7 @@ Return a ProgressTreePatch object only:
 Rules:
 1. The tree digest contains only the most recent goal and all of its steps. Previous goals are closed and must not be revisited.
 2. Each upsert goal must contain its stable "id". Return the latest goal and include all of its steps.
-3. Every returned goal and step must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
+3. Every returned goal must contain at least one step. Every returned goal and step must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
 4. Preserve IDs from the tree digest whenever a node is returned. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
 6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.
@@ -193,6 +193,9 @@ function validatePatch(patch) {
         const goal = patch.upsertGoals[i];
         if (typeof goal.description !== 'string') {
             errors.push(`patch.upsertGoals[${i}].description must be a string`);
+        }
+        if (!Array.isArray(goal.steps) || goal.steps.length === 0) {
+            errors.push(`patch.upsertGoals[${i}].steps must be a non-empty array`);
         }
         for (let j = 0; j < (goal.steps?.length ?? 0); j++) {
             const step = goal.steps?.[j];
