@@ -543,6 +543,53 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].status).toBe('completed');
   });
 
+  it('orders patch steps to match the conversation turn order', async () => {
+    const client = mockClient({
+      text: patchResponse(1, [
+        {
+          id: 'g1',
+          subject: 'Goal',
+          description: '',
+          status: 'in_progress',
+          steps: [
+            {
+              id: 's3',
+              subject: 'Third',
+              description: '',
+              status: 'completed',
+              promptId: 'p3',
+            },
+            {
+              id: 's1',
+              subject: 'First',
+              description: '',
+              status: 'completed',
+              promptId: 'p1',
+            },
+            {
+              id: 's2',
+              subject: 'Second',
+              description: '',
+              status: 'completed',
+              promptId: 'p2',
+            },
+          ],
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(
+      { version: 0, goals: [] },
+      [
+        turn({ promptId: 'p1', lineStart: 1, lineEnd: 1 }),
+        turn({ promptId: 'p2', lineStart: 2, lineEnd: 2 }),
+        turn({ promptId: 'p3', lineStart: 3, lineEnd: 3 }),
+      ],
+    );
+
+    expect(result.goals[0].steps?.map((step) => step.promptId)).toEqual(['p1', 'p2', 'p3']);
+  });
+
   it('generates stable ids for missing patch ids without reusing previous nodes', async () => {
     const tree: ProgressTree = {
       version: 1,
