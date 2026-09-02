@@ -23,7 +23,6 @@ export interface LLMExtractionEngineOptions {
   config: LLMConfig;
   client?: Anthropic;
   trace?: (event: ExtractionTraceEvent) => void;
-  similaritySplitting?: boolean;
 }
 
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
@@ -31,11 +30,8 @@ const ASSISTANT_SUMMARY_LIMIT = 1000;
 const USER_TEXT_LIMIT = 1000;
 const MAX_STEPS_PER_GOAL = 12;
 const MAX_GOAL_CHARS = 4000;
-const TOPIC_SIMILARITY_MIN = 0.5;
-const TASK_CONTINUATION_MIN = 0.5;
-const BOUNDARY_CONFIDENCE_MAX = 0.7;
 
-const SYSTEM_PROMPT = `You are a progress-tree updater. Given the latest conversation turns, update the latest goal and return only a ProgressTreePatch JSON object.
+const SYSTEM_PROMPT = `You are a progress-tree updater. Given the latest conversation turns, decide goal boundaries and return only a ProgressTreePatch JSON object.
 
 Return shape:
 {
@@ -62,9 +58,9 @@ Return shape:
 }
 
 Rules:
-1. Only update the latest goal. Never modify or reopen previous goals.
-2. Place relevant conversation turns as steps under the latest goal. Every returned goal must contain at least one step.
-3. Prefer continuing the latest goal; only start a new goal when the user clearly changes to a different, unrelated topic. Use semantic similarity to decide whether a turn belongs to the latest goal, not just keyword overlap. Do not merge when it would make the latest goal exceed 12 steps or 4000 characters. For example, multiple markdown feature improvements belong to one goal.
+1. Only update the latest goal and newly detected goals. Never modify or reopen previous goals.
+2. Before assigning steps, decide boundaries between the latest goal and the incoming turns. "upsertGoals" may contain more than one goal when a clear task boundary is detected.
+3. For each turn, compare it with the latest goal and the preceding step using topic similarity, task continuation, and boundary confidence. Continue the same goal unless a new task stage, sub-task, or objective begins. Do not merge when it would make the latest goal exceed 12 steps or 4000 characters.
 4. Keep steps at conversational granularity: one user turn normally maps to one step. Do not split one turn into multiple steps or merge unrelated turns.
 5. Preserve IDs from the tree digest for existing nodes. Generate stable IDs only for new nodes.
 6. Infer subject, description, and status only from user text and assistant summary. Never use reasoning or tool output.
@@ -74,32 +70,6 @@ Rules:
 10. Keep each subject under 640 characters and each description under 960 characters. Summarize, do not restate the turn.
 11. Do not analyze completed history or explain decisions.
 12. Output only valid JSON that starts with "{" and ends with "}". No markdown fences, comments, reasoning, or extra text.`;
-
-const SIMILARITY_SYSTEM_PROMPT = `You are deciding whether consecutive conversation steps belong to the same goal.
-
-Judge both topic similarity and task continuation. A high topic similarity is not enough to keep the same goal when the user starts a new task stage, sub-task, or objective.
-
-Consider whether the right step:
-- continues, refines, fixes, tests, or revises the left step;
-- starts a new task stage, sub-task, or objective;
-- explicitly switches to a different action even if the topic stays similar.
-
-Return only JSON:
-{
-  "decisions": [
-    {
-      "left_prompt_id": "<left promptId>",
-      "right_prompt_id": "<right promptId>",
-      "topic_similarity": 0.85,
-      "task_continuation": 0.75,
-      "boundary_confidence": 0.2,
-      "should_split": false,
-      "reason": "<short reason>"
-    }
-  ]
-}
-
-All numeric fields must be from 0.0 to 1.0. Set "should_split" to true only when a clear task boundary exists.`;
 
 interface TreeDigestGoal {
   id: string;
@@ -507,12 +477,10 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
   private config: LLMConfig;
   private usageListeners: ((usage: { inputTokens: number; outputTokens: number }) => void)[] = [];
   private trace: ((event: ExtractionTraceEvent) => void) | undefined;
-  private similaritySplitting: boolean;
 
   constructor(options: LLMExtractionEngineOptions) {
     this.config = options.config;
     this.trace = options.trace;
-    this.similaritySplitting = options.similaritySplitting ?? false;
     this.client =
       options.client ??
       new Anthropic({
@@ -574,109 +542,6 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       const idx = this.usageListeners.indexOf(callback);
       if (idx !== -1) this.usageListeners.splice(idx, 1);
     };
-  }
-
-  private async splitPatchBySimilarity(
-    patch: ProgressTreePatch,
-  ): Promise<ProgressTreePatch> {
-    if (!this.similaritySplitting) return patch;
-    const upsertGoals: ProgressGoal[] = [];
-    for (const goal of patch.upsertGoals) {
-      upsertGoals.push(...(await this.splitGoalBySimilarity(goal)));
-    }
-    return { ...patch, upsertGoals };
-  }
-
-  private async splitGoalBySimilarity(goal: ProgressGoal): Promise<ProgressGoal[]> {
-    const steps = goal.steps ?? [];
-    if (steps.length < 2) return [goal];
-
-    const stepPairs = steps.slice(0, -1).map((step, index) => ({
-      left: {
-        promptId: step.promptId,
-        subject: step.subject,
-        description: step.description ?? '',
-      },
-      right: {
-        promptId: steps[index + 1].promptId,
-        subject: steps[index + 1].subject,
-        description: steps[index + 1].description ?? '',
-      },
-    }));
-
-    try {
-      const response = await this.client.messages.create({
-        model: this.config.model,
-        max_tokens: Math.min(this.config.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
-        temperature: 0,
-        system: SIMILARITY_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: JSON.stringify({
-              goal: {
-                subject: goal.subject,
-                description: goal.description ?? '',
-              },
-              step_pairs: stepPairs,
-            }),
-          },
-        ],
-      } as Anthropic.MessageCreateParamsNonStreaming);
-
-      const rawOutput = response.content
-        .map((block) => (block.type === 'text' ? block.text : ''))
-        .join('');
-      const jsonText = extractJsonObject(rawOutput);
-      const parsed = JSON.parse(jsonText) as {
-        decisions?: Array<{
-          should_split?: boolean;
-          topic_similarity?: number;
-          task_continuation?: number;
-          boundary_confidence?: number;
-        }>;
-      };
-      const decisions = Array.isArray(parsed.decisions) ? parsed.decisions : [];
-
-      const groups: ProgressStep[][] = [[steps[0]]];
-      for (let i = 1; i < steps.length; i++) {
-        const decision = decisions[i - 1];
-        const shouldSplit =
-          decision?.should_split === true ||
-          (typeof decision?.boundary_confidence === 'number' &&
-            decision.boundary_confidence >= BOUNDARY_CONFIDENCE_MAX) ||
-          (typeof decision?.task_continuation === 'number' &&
-            decision.task_continuation < TASK_CONTINUATION_MIN) ||
-          (typeof decision?.topic_similarity === 'number' &&
-            decision.topic_similarity < TOPIC_SIMILARITY_MIN);
-        if (shouldSplit) {
-          groups.push([]);
-        }
-        groups[groups.length - 1].push(steps[i]);
-      }
-
-      const baseSubject = stripGoalNumberSuffix(goal.subject);
-      const baseId = stripGoalPartSuffix(goal.id);
-      return groups.map((group, index) => {
-        if (index === 0) {
-          return normalizeGoalStatus({
-            ...goal,
-            id: baseId,
-            subject: baseSubject,
-            steps: group,
-          });
-        }
-        return normalizeGoalStatus({
-          ...goal,
-          id: `${baseId}-part-${index + 1}`,
-          subject: group[0]?.subject ?? baseSubject,
-          description: group[0]?.description ?? goal.description,
-          steps: group,
-        });
-      });
-    } catch {
-      return [goal];
-    }
   }
 
   private async doExtract(
@@ -801,7 +666,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
       }
       const repairedPatch = repairPatchIds(parsedPatch);
       const orderedPatch = orderPatchByConversation(repairedPatch, turns);
-      const patch = await this.splitPatchBySimilarity(orderedPatch);
+      const patch = orderedPatch;
       const errors = validatePatch(patch);
       if (errors.length > 0) {
         throw new Error(`Schema validation failed: ${errors.join('; ')}`);

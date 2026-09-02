@@ -6,14 +6,12 @@ export interface LLMExtractionEngineOptions {
     config: LLMConfig;
     client?: Anthropic;
     trace?: (event: ExtractionTraceEvent) => void;
-    similaritySplitting?: boolean;
 }
 export declare class LLMExtractionEngineImpl implements LLMExtractionEngine {
     private client;
     private config;
     private usageListeners;
     private trace;
-    private similaritySplitting;
     constructor(options: LLMExtractionEngineOptions);
     extract(tree: ProgressTree, turns: ConversationTurn[], onProgress?: (tree: ProgressTree) => void, traceContext?: ExtractionTraceContext): Promise<ProgressTree>;
     private extractChunk;
@@ -21,8 +19,6 @@ export declare class LLMExtractionEngineImpl implements LLMExtractionEngine {
         inputTokens: number;
         outputTokens: number;
     }) => void): () => void;
-    private splitPatchBySimilarity;
-    private splitGoalBySimilarity;
     private doExtract;
 }
 //# sourceMappingURL=extractor.d.ts.map

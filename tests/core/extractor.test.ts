@@ -555,7 +555,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(systemPrompt).toContain('deleted');
   });
 
-  it('instructs the model to aggregate related refinements into one goal', async () => {
+  it('instructs the model to decide boundaries before assigning goals', async () => {
     const client = mockClient({
       text: patchResponse(1, [
         {
@@ -580,8 +580,10 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
 
     const request = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     const systemPrompt = request.system as string;
-    expect(systemPrompt).toContain('only start a new goal');
-    expect(systemPrompt).toContain('markdown feature improvements belong to one goal');
+    expect(systemPrompt).toContain('decide boundaries');
+    expect(systemPrompt).toContain('topic similarity');
+    expect(systemPrompt).toContain('task continuation');
+    expect(systemPrompt).toContain('boundary confidence');
   });
 
   it('promotes a goal to completed when all of its steps are completed', async () => {
@@ -668,103 +670,6 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     );
 
     expect(result.goals[0].steps?.map((step) => step.promptId)).toEqual(['p1', 'p2', 'p3']);
-  });
-
-  it('splits goals when LLM detects a task boundary', async () => {
-    const client = {
-      messages: {
-        create: vi
-          .fn()
-          .mockResolvedValueOnce({
-            content: [
-              {
-                type: 'text',
-                text: patchResponse(1, [
-                  {
-                    id: 'g1',
-                    subject: 'Goal',
-                    description: '',
-                    status: 'in_progress',
-                    steps: [
-                      {
-                        id: 's1',
-                        subject: 'First',
-                        description: '',
-                        status: 'completed',
-                        promptId: 'p1',
-                      },
-                      {
-                        id: 's2',
-                        subject: 'Second',
-                        description: '',
-                        status: 'completed',
-                        promptId: 'p2',
-                      },
-                      {
-                        id: 's3',
-                        subject: 'Third',
-                        description: '',
-                        status: 'completed',
-                        promptId: 'p3',
-                      },
-                    ],
-                  },
-                ]),
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          })
-          .mockResolvedValueOnce({
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify({
-                  decisions: [
-                    {
-                      left_prompt_id: 'p1',
-                      right_prompt_id: 'p2',
-                      topic_similarity: 0.9,
-                      task_continuation: 0.8,
-                      boundary_confidence: 0.2,
-                      should_split: false,
-                      reason: 'continued',
-                    },
-                    {
-                      left_prompt_id: 'p2',
-                      right_prompt_id: 'p3',
-                      topic_similarity: 0.85,
-                      task_continuation: 0.3,
-                      boundary_confidence: 0.8,
-                      should_split: true,
-                      reason: 'new task stage',
-                    },
-                  ],
-                }),
-              },
-            ],
-            usage: { input_tokens: 10, output_tokens: 5 },
-          }),
-      },
-    } as unknown as Anthropic;
-    const engine = new LLMExtractionEngineImpl({
-      config: mockConfig(),
-      client,
-      similaritySplitting: true,
-    });
-
-    const result = await engine.extract(
-      { version: 0, goals: [] },
-      [
-        turn({ promptId: 'p1', lineStart: 1, lineEnd: 1 }),
-        turn({ promptId: 'p2', lineStart: 2, lineEnd: 2 }),
-        turn({ promptId: 'p3', lineStart: 3, lineEnd: 3 }),
-      ],
-    );
-
-    expect(result.goals.map((goal) => goal.steps?.map((step) => step.promptId))).toEqual([
-      ['p1', 'p2'],
-      ['p3'],
-    ]);
   });
 
   it('generates stable ids for missing patch ids without reusing previous nodes', async () => {
