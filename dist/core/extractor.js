@@ -1,9 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { isProgressStatus, validateProgressTree } from './schema.js';
+import { validateProgressTree } from './schema.js';
 import { estimateTokens, measureConversationTurns, } from './trace.js';
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
-const ASSISTANT_SUMMARY_LIMIT = 500;
-const USER_TEXT_LIMIT = 2000;
+const ASSISTANT_SUMMARY_LIMIT = 1000;
+const USER_TEXT_LIMIT = 1000;
 const SYSTEM_PROMPT = `You are a session progress updater. Your job is to apply new conversation turns to an existing progress tree.
 
 Return a ProgressTreePatch object only:
@@ -16,11 +16,11 @@ Return a ProgressTreePatch object only:
 
 Rules:
 1. Only the most recent goal is provided. Previous goals are closed and must not be revisited.
-2. Each upsert goal must contain its stable "id". Include affected steps only; unchanged steps may be omitted.
-3. For existing goals or steps, unchanged fields may be omitted; the server fills them from the current tree. New nodes must contain a non-empty "id", exact "promptId", "subject", "description", and "status".
+2. Each upsert goal must contain its stable "id". Include every affected step.
+3. Every affected node must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
-6. Keep each subject under 80 characters and each description under 120 characters. Do not restate the turn text. Omit unchanged fields for existing nodes.
+6. Keep each subject under 80 characters and each description under 120 characters. Do not restate the turn text.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
 8. Do not analyze completed history or produce a planning narrative. Only decide whether each turn continues the latest goal or starts a new goal.
 9. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
@@ -50,23 +50,28 @@ function uniqueId(base, used) {
 function truncateText(value, maxLength) {
     if (!value)
         return undefined;
-    if (value.length <= maxLength)
-        return value;
-    return `${value.slice(0, maxLength)}\n...[truncated]`;
+    return value.slice(0, maxLength);
 }
 function buildTreeDigest(tree) {
     const latestGoal = tree.goals[tree.goals.length - 1];
     if (!latestGoal)
         return [];
+    const steps = latestGoal.steps ?? [];
+    const latestStep = steps[steps.length - 1];
     return [{
             id: latestGoal.id,
-            subject: truncateText(latestGoal.subject, 120) ?? latestGoal.subject,
+            subject: latestGoal.subject,
+            description: latestGoal.description,
             status: latestGoal.status,
-            steps: (latestGoal.steps ?? []).map((step) => ({
-                id: step.id,
-                promptId: step.promptId,
-                status: step.status,
-            })),
+            steps: latestStep
+                ? [{
+                        id: latestStep.id,
+                        promptId: latestStep.promptId,
+                        subject: latestStep.subject,
+                        description: latestStep.description,
+                        status: latestStep.status,
+                    }]
+                : [],
         }];
 }
 function buildTurnInput(turn) {
@@ -106,118 +111,23 @@ function usageTrace(usage) {
     }
     return trace;
 }
-function previousGoalForCandidate(goal, previous) {
-    const stepPromptIds = new Set();
-    if (Array.isArray(goal.steps)) {
-        for (const step of goal.steps) {
-            if (!isObject(step))
-                continue;
-            const promptId = nonEmptyString(step.promptId);
-            if (promptId)
-                stepPromptIds.add(promptId);
-        }
-    }
-    if (stepPromptIds.size > 0) {
-        let best;
-        let bestMatches = 0;
-        for (const oldGoal of previous.goals) {
-            const matches = (oldGoal.steps ?? []).filter((step) => stepPromptIds.has(step.promptId)).length;
-            if (matches > bestMatches) {
-                best = oldGoal;
-                bestMatches = matches;
-            }
-        }
-        if (best && bestMatches > 0)
-            return best;
-    }
-    const subject = nonEmptyString(goal.subject);
-    if (!subject)
-        return undefined;
-    return previous.goals.find((oldGoal) => oldGoal.subject === subject);
-}
-function previousStepByPromptId(previous) {
-    const steps = new Map();
-    for (const goal of previous.goals) {
-        for (const step of goal.steps ?? []) {
-            steps.set(step.promptId, step);
-        }
-    }
-    return steps;
-}
-function previousStepById(previous) {
-    const steps = new Map();
-    for (const goal of previous.goals) {
-        for (const step of goal.steps ?? []) {
-            steps.set(step.id, step);
-        }
-    }
-    return steps;
-}
-function repairPatchIds(patch, previous) {
-    const previousGoalsById = new Map(previous.goals.map((goal) => [goal.id, goal]));
-    const previousSteps = previousStepByPromptId(previous);
-    const previousStepsById = previousStepById(previous);
+function repairPatchIds(patch) {
     const usedGoalIds = new Set();
     const usedStepIds = new Set();
     const upsertGoals = patch.upsertGoals.map((goal) => {
         const suppliedGoalId = nonEmptyString(goal.id);
-        const previousGoal = suppliedGoalId
-            ? previousGoalsById.get(suppliedGoalId)
-            : previousGoalForCandidate(goal, previous);
-        const goalId = suppliedGoalId && !usedGoalIds.has(suppliedGoalId)
-            ? suppliedGoalId
-            : uniqueId(previousGoal?.id ?? `goal-${stableHash(goal.subject ?? 'unknown-goal')}`, usedGoalIds);
-        if (suppliedGoalId && usedGoalIds.has(suppliedGoalId)) {
-            usedGoalIds.add(goalId);
-        }
-        else {
-            usedGoalIds.add(suppliedGoalId ?? goalId);
-        }
-        const subject = nonEmptyString(goal.subject) ??
-            previousGoal?.subject ??
-            'Untitled goal';
-        const status = isProgressStatus(goal.status)
-            ? goal.status
-            : previousGoal?.status ?? 'in_progress';
+        const goalId = uniqueId(suppliedGoalId ?? `goal-${stableHash(goal.subject ?? 'unknown-goal')}`, usedGoalIds);
         const steps = goal.steps?.map((step, index) => {
             const suppliedStepId = nonEmptyString(step.id);
-            const previousStep = previousSteps.get(step.promptId) ??
-                (suppliedStepId ? previousStepsById.get(suppliedStepId) : undefined);
-            const stepId = suppliedStepId && !usedStepIds.has(suppliedStepId)
-                ? suppliedStepId
-                : uniqueId(previousStep?.id ?? `step-${stableHash(step.promptId || `${goalId}:${index}`)}`, usedStepIds);
-            usedStepIds.add(stepId);
-            const promptId = nonEmptyString(step.promptId) ??
-                previousStep?.promptId ??
-                stepId;
-            const stepSubject = nonEmptyString(step.subject) ??
-                previousStep?.subject ??
-                'Untitled step';
-            const stepStatus = isProgressStatus(step.status)
-                ? step.status
-                : previousStep?.status ?? 'pending';
-            const stepDescription = typeof step.description === 'string' && step.description.length > 0
-                ? step.description
-                : previousStep?.description;
+            const stepId = uniqueId(suppliedStepId ?? `step-${stableHash(step.promptId || `${goalId}:${index}`)}`, usedStepIds);
             return {
                 ...step,
                 id: stepId,
-                promptId,
-                subject: stepSubject,
-                status: stepStatus,
-                ...(stepDescription ? { description: stepDescription } : {}),
             };
         });
         return {
             ...goal,
             id: goalId,
-            subject,
-            status,
-            ...(typeof goal.description === 'string' && goal.description.length > 0
-                ? { description: goal.description }
-                : previousGoal?.description
-                    ? { description: previousGoal.description }
-                    : {}),
             ...(steps ? { steps } : {}),
         };
     });
@@ -239,6 +149,18 @@ function validatePatch(patch) {
     }
     if (errors.length > 0)
         return errors;
+    for (let i = 0; i < patch.upsertGoals.length; i++) {
+        const goal = patch.upsertGoals[i];
+        if (typeof goal.description !== 'string') {
+            errors.push(`patch.upsertGoals[${i}].description must be a string`);
+        }
+        for (let j = 0; j < (goal.steps?.length ?? 0); j++) {
+            const step = goal.steps?.[j];
+            if (step && typeof step.description !== 'string') {
+                errors.push(`patch.upsertGoals[${i}].steps[${j}].description must be a string`);
+            }
+        }
+    }
     const treeErrors = validateProgressTree({
         version: patch.version,
         goals: patch.upsertGoals,
@@ -404,7 +326,9 @@ export class LLMExtractionEngineImpl {
                 temperature: 0,
                 system: SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: prompt }],
-                thinking: { type: 'disabled' },
+                thinking: { type: 'enabled' },
+                output_config: { effort: 'low' },
+                response_format: { type: 'json_object' },
             };
             const response = await this.client.messages.create(requestParams);
             const usage = response.usage;
@@ -473,7 +397,7 @@ export class LLMExtractionEngineImpl {
             if (!isObject(parsedPatch) || !Array.isArray(parsedPatch.upsertGoals)) {
                 throw new Error('Model response must contain patch.upsertGoals');
             }
-            const patch = repairPatchIds(parsedPatch, tree);
+            const patch = repairPatchIds(parsedPatch);
             const errors = validatePatch(patch);
             if (errors.length > 0) {
                 throw new Error(`Schema validation failed: ${errors.join('; ')}`);
