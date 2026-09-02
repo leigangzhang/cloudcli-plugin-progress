@@ -17,6 +17,15 @@ function extractText(value) {
     }
     return '';
 }
+function toContentBlocks(value) {
+    if (typeof value === 'string') {
+        return value ? [{ type: 'text', text: value }] : [];
+    }
+    if (Array.isArray(value)) {
+        return value.filter((item) => typeof item === 'object' && item !== null);
+    }
+    return [];
+}
 function findRootPromptId(entry, uuidMap) {
     const visited = new Set();
     let current = entry;
@@ -43,30 +52,35 @@ function buildTurn(items) {
     for (const { entry } of items) {
         if (entry.timestamp && entry.timestamp > timestamp)
             timestamp = entry.timestamp;
-        const blocks = entry.content ?? entry.message?.content ?? [];
+        const blocks = toContentBlocks(entry.content ?? entry.message?.content);
         if (entry.type === 'user') {
             if (!firstUserProcessed) {
                 for (const block of blocks) {
-                    if (block.type === 'text')
+                    if (block.type === 'text' && typeof block.text === 'string') {
                         userTexts.push(block.text);
+                    }
                 }
                 firstUserProcessed = true;
             }
             else {
                 for (const block of blocks) {
-                    if (block.type === 'tool_result')
+                    if (block.type === 'tool_result') {
                         toolTexts.push(extractText(block.content));
-                    else if (block.type === 'text')
+                    }
+                    else if (block.type === 'text' && typeof block.text === 'string') {
                         toolTexts.push(block.text);
+                    }
                 }
             }
         }
         else if (entry.type === 'assistant') {
             for (const block of blocks) {
-                if (block.type === 'thinking')
+                if (block.type === 'thinking' && typeof block.thinking === 'string') {
                     thinkingTexts.push(block.thinking);
-                else if (block.type === 'text')
+                }
+                else if (block.type === 'text' && typeof block.text === 'string') {
                     assistantTexts.push(block.text);
+                }
             }
         }
     }

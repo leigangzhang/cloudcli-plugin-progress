@@ -45,7 +45,7 @@ Rules:
 3. Every affected node must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
-6. Keep each subject under 80 characters and each description under 120 characters. Do not restate the turn text.
+6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
 8. Do not analyze completed history or produce a planning narrative. Only decide whether each turn continues the latest goal or starts a new goal.
 9. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
