@@ -666,6 +666,99 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].steps?.map((step) => step.promptId)).toEqual(['p1', 'p2', 'p3']);
   });
 
+  it('splits goals when LLM similarity drops below the threshold', async () => {
+    const client = {
+      messages: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: patchResponse(1, [
+                  {
+                    id: 'g1',
+                    subject: 'Goal',
+                    description: '',
+                    status: 'in_progress',
+                    steps: [
+                      {
+                        id: 's1',
+                        subject: 'First',
+                        description: '',
+                        status: 'completed',
+                        promptId: 'p1',
+                      },
+                      {
+                        id: 's2',
+                        subject: 'Second',
+                        description: '',
+                        status: 'completed',
+                        promptId: 'p2',
+                      },
+                      {
+                        id: 's3',
+                        subject: 'Third',
+                        description: '',
+                        status: 'completed',
+                        promptId: 'p3',
+                      },
+                    ],
+                  },
+                ]),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          })
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  scores: [
+                    {
+                      left_prompt_id: 'p1',
+                      right_prompt_id: 'p2',
+                      similarity: 0.8,
+                      same_goal: true,
+                      reason: 'related',
+                    },
+                    {
+                      left_prompt_id: 'p2',
+                      right_prompt_id: 'p3',
+                      similarity: 0.2,
+                      same_goal: false,
+                      reason: 'topic change',
+                    },
+                  ],
+                }),
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5 },
+          }),
+      },
+    } as unknown as Anthropic;
+    const engine = new LLMExtractionEngineImpl({
+      config: mockConfig(),
+      client,
+      similaritySplitting: true,
+    });
+
+    const result = await engine.extract(
+      { version: 0, goals: [] },
+      [
+        turn({ promptId: 'p1', lineStart: 1, lineEnd: 1 }),
+        turn({ promptId: 'p2', lineStart: 2, lineEnd: 2 }),
+        turn({ promptId: 'p3', lineStart: 3, lineEnd: 3 }),
+      ],
+    );
+
+    expect(result.goals.map((goal) => goal.steps?.map((step) => step.promptId))).toEqual([
+      ['p1', 'p2'],
+      ['p3'],
+    ]);
+  });
+
   it('generates stable ids for missing patch ids without reusing previous nodes', async () => {
     const tree: ProgressTree = {
       version: 1,

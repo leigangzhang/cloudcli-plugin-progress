@@ -6,6 +6,7 @@ const ASSISTANT_SUMMARY_LIMIT = 1000;
 const USER_TEXT_LIMIT = 1000;
 const MAX_STEPS_PER_GOAL = 12;
 const MAX_GOAL_CHARS = 4000;
+const SIMILARITY_THRESHOLD = 0.55;
 const SYSTEM_PROMPT = `You are a progress-tree updater. Given the latest conversation turns, update the latest goal and return only a ProgressTreePatch JSON object.
 
 Return shape:
@@ -45,6 +46,27 @@ Rules:
 10. Keep each subject under 640 characters and each description under 960 characters. Summarize, do not restate the turn.
 11. Do not analyze completed history or explain decisions.
 12. Output only valid JSON that starts with "{" and ends with "}". No markdown fences, comments, reasoning, or extra text.`;
+const SIMILARITY_SYSTEM_PROMPT = `You are comparing consecutive conversation steps to decide whether they belong to the same goal.
+
+Consider whether the two steps:
+- operate on the same module, object, or system;
+- continue, refine, or fix the same task;
+- clearly switch to a different task or topic.
+
+Return only JSON:
+{
+  "scores": [
+    {
+      "left_prompt_id": "<left promptId>",
+      "right_prompt_id": "<right promptId>",
+      "similarity": 0.85,
+      "same_goal": true,
+      "reason": "<short reason>"
+    }
+  ]
+}
+
+"similarity" must be a number from 0.0 to 1.0. Set "same_goal" to false only for a clear topic change.`;
 function isObject(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -375,6 +397,7 @@ export class LLMExtractionEngineImpl {
         this.usageListeners = [];
         this.config = options.config;
         this.trace = options.trace;
+        this.similaritySplitting = options.similaritySplitting ?? false;
         this.client =
             options.client ??
                 new Anthropic({
@@ -423,6 +446,80 @@ export class LLMExtractionEngineImpl {
             if (idx !== -1)
                 this.usageListeners.splice(idx, 1);
         };
+    }
+    async splitPatchBySimilarity(patch) {
+        if (!this.similaritySplitting)
+            return patch;
+        const upsertGoals = [];
+        for (const goal of patch.upsertGoals) {
+            upsertGoals.push(...(await this.splitGoalBySimilarity(goal)));
+        }
+        return { ...patch, upsertGoals };
+    }
+    async splitGoalBySimilarity(goal) {
+        const steps = goal.steps ?? [];
+        if (steps.length < 2)
+            return [goal];
+        const stepPairs = steps.slice(0, -1).map((step, index) => ({
+            left: {
+                promptId: step.promptId,
+                subject: step.subject,
+                description: step.description ?? '',
+            },
+            right: {
+                promptId: steps[index + 1].promptId,
+                subject: steps[index + 1].subject,
+                description: steps[index + 1].description ?? '',
+            },
+        }));
+        try {
+            const response = await this.client.messages.create({
+                model: this.config.model,
+                max_tokens: Math.min(this.config.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS),
+                temperature: 0,
+                system: SIMILARITY_SYSTEM_PROMPT,
+                messages: [
+                    {
+                        role: 'user',
+                        content: JSON.stringify({
+                            goal: {
+                                subject: goal.subject,
+                                description: goal.description ?? '',
+                            },
+                            step_pairs: stepPairs,
+                        }),
+                    },
+                ],
+            });
+            const rawOutput = response.content
+                .map((block) => (block.type === 'text' ? block.text : ''))
+                .join('');
+            const jsonText = extractJsonObject(rawOutput);
+            const parsed = JSON.parse(jsonText);
+            const scores = Array.isArray(parsed.scores) ? parsed.scores : [];
+            const groups = [[steps[0]]];
+            for (let i = 1; i < steps.length; i++) {
+                const similarity = scores[i - 1]?.similarity;
+                if (typeof similarity === 'number' && similarity < SIMILARITY_THRESHOLD) {
+                    groups.push([]);
+                }
+                groups[groups.length - 1].push(steps[i]);
+            }
+            return groups.map((group, index) => {
+                if (index === 0) {
+                    return normalizeGoalStatus({ ...goal, steps: group });
+                }
+                return normalizeGoalStatus({
+                    ...goal,
+                    id: `${goal.id}-part-${index + 1}`,
+                    subject: `${goal.subject} (${index + 1})`,
+                    steps: group,
+                });
+            });
+        }
+        catch {
+            return [goal];
+        }
     }
     async doExtract(tree, turns, traceContext, attempt = 1) {
         const prompt = buildPrompt(tree, turns);
@@ -522,7 +619,8 @@ export class LLMExtractionEngineImpl {
                 throw new Error('Model response must contain patch.upsertGoals');
             }
             const repairedPatch = repairPatchIds(parsedPatch);
-            const patch = orderPatchByConversation(repairedPatch, turns);
+            const orderedPatch = orderPatchByConversation(repairedPatch, turns);
+            const patch = await this.splitPatchBySimilarity(orderedPatch);
             const errors = validatePatch(patch);
             if (errors.length > 0) {
                 throw new Error(`Schema validation failed: ${errors.join('; ')}`);
