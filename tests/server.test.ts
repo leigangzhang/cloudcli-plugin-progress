@@ -160,6 +160,36 @@ describe('ProgressServer', () => {
     expect(turn.userText).toBe('Hello');
     expect(turn.assistantText).toBe('World');
   });
+
+  it('caps incremental turns to the latest 20 pending turns', () => {
+    const internal = server as unknown as {
+      getPendingTurns: (
+        session: { store: { getState: () => { goals: Array<{ steps?: Array<{ promptId: string }> }> } } },
+        turns: Array<{ promptId: string }>,
+      ) => Array<{ promptId: string }>;
+    };
+    const turns = Array.from({ length: 25 }, (_, index) => ({
+      promptId: `p${index + 1}`,
+    }));
+    const pending = internal.getPendingTurns(
+      {
+        store: {
+          getState: () => ({
+            goals: [
+              {
+                steps: [{ promptId: 'p1' }, { promptId: 'p2' }],
+              },
+            ],
+          }),
+        },
+      },
+      turns,
+    );
+
+    expect(pending.map((turn) => turn.promptId)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `p${index + 6}`),
+    );
+  });
 });
 
 describe('ProgressServer without API key', () => {

@@ -75,6 +75,8 @@ function readBody(req: http.IncomingMessage): Promise<string> {
   });
 }
 
+const MAX_INCREMENTAL_TURNS = 20;
+
 export class ProgressServer {
   private httpServer?: http.Server;
   private wss?: WebSocketServer;
@@ -210,7 +212,9 @@ export class ProgressServer {
         processedPromptIds.add(step.promptId);
       }
     }
-    return turns.filter((turn) => !processedPromptIds.has(turn.promptId));
+    return turns
+      .filter((turn) => !processedPromptIds.has(turn.promptId))
+      .slice(-MAX_INCREMENTAL_TURNS);
   }
 
   private async runExtraction(

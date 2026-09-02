@@ -497,6 +497,45 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(systemPrompt).toContain('deleted');
   });
 
+  it('promotes a goal to completed when all of its steps are completed', async () => {
+    const tree: ProgressTree = {
+      version: 1,
+      goals: [
+        {
+          id: 'g1',
+          subject: 'Goal',
+          status: 'in_progress',
+          steps: [
+            { id: 's1', subject: 'Step', status: 'pending', promptId: 'p1' },
+          ],
+        },
+      ],
+    };
+    const client = mockClient({
+      text: patchResponse(2, [
+        {
+          id: 'g1',
+          subject: 'Goal',
+          description: '',
+          status: 'in_progress',
+          steps: [
+            {
+              id: 's1',
+              subject: 'Step',
+              description: '',
+              status: 'completed',
+              promptId: 'p1',
+            },
+          ],
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    const result = await engine.extract(tree, [turn()]);
+
+    expect(result.goals[0].status).toBe('completed');
+  });
+
   it('generates stable ids for missing patch ids without reusing previous nodes', async () => {
     const tree: ProgressTree = {
       version: 1,
