@@ -29,28 +29,45 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 const ASSISTANT_SUMMARY_LIMIT = 1000;
 const USER_TEXT_LIMIT = 1000;
 
-const SYSTEM_PROMPT = `You are a session progress updater. Your job is to apply new conversation turns to an existing progress tree.
+const SYSTEM_PROMPT = `You are a progress-tree updater. Given the latest conversation turns, update the latest goal and return only a ProgressTreePatch JSON object.
 
-Return a ProgressTreePatch object only:
+Return shape:
 {
   "version": <next integer version>,
-  "upsertGoals": [the latest goal object with all of its steps and descriptions],
+  "upsertGoals": [
+    {
+      "id": "<goal id>",
+      "subject": "<goal subject>",
+      "description": "<goal description>",
+      "status": "<pending | in_progress | completed | deleted>",
+      "steps": [
+        {
+          "id": "<step id>",
+          "promptId": "<conversation turn promptId>",
+          "subject": "<step subject>",
+          "description": "<step description>",
+          "status": "<pending | in_progress | completed | deleted>"
+        }
+      ]
+    }
+  ],
   "deleteGoalIds": [],
   "deleteStepIds": []
 }
 
 Rules:
-1. The tree digest contains only the most recent goal and all of its steps. Previous goals are closed and must not be revisited.
-2. Each upsert goal must contain its stable "id". Return the latest goal and include all of its steps.
-3. Every returned goal must contain at least one step. Every returned goal and step must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
-4. Preserve IDs from the tree digest whenever a node is returned. Create stable new IDs only for new nodes.
-5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
-6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.
-7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
-8. Do not analyze completed history or produce a planning narrative. Prefer continuing the latest goal; only start a new goal when the user clearly changes to a different, unrelated topic.
-9. Treat follow-up refinements, bug fixes, and feature improvements to the same subject as steps under the latest goal, not as separate goals. For example, multiple markdown feature improvements belong to one goal.
-10. Return goals and steps in the same order as the conversation turns.
-11. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
+1. Only update the latest goal. Never modify or reopen previous goals.
+2. Place relevant conversation turns as steps under the latest goal. Every returned goal must contain at least one step.
+3. Prefer continuing the latest goal; only start a new goal when the user clearly changes to a different, unrelated topic. For example, multiple markdown feature improvements belong to one goal.
+4. Keep steps at conversational granularity: one user turn normally maps to one step. Do not split one turn into multiple steps or merge unrelated turns.
+5. Preserve IDs from the tree digest for existing nodes. Generate stable IDs only for new nodes.
+6. Infer subject, description, and status only from user text and assistant summary. Never use reasoning or tool output.
+7. Status meaning: "pending" = not started, "in_progress" = active, "completed" = done, "deleted" = removed.
+8. Return goals and steps in the same order as the conversation turns.
+9. Use the user's dominant language for every subject and description.
+10. Keep each subject under 640 characters and each description under 960 characters. Summarize, do not restate the turn.
+11. Do not analyze completed history or explain decisions.
+12. Output only valid JSON that starts with "{" and ends with "}". No markdown fences, comments, reasoning, or extra text.`;
 
 interface TreeDigestGoal {
   id: string;
