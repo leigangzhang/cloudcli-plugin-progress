@@ -218,7 +218,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].steps).toHaveLength(12);
     expect(result.goals[1].steps).toHaveLength(1);
     expect(result.goals[0].subject).toBe('Large goal');
-    expect(result.goals[1].subject).toBe('Large goal (2)');
+    expect(result.goals[1].subject).toBe('Step 13');
     expect(result.goals[0].id).toBe('g1');
     expect(result.goals[1].id).toBe('g1-part-2');
   });
