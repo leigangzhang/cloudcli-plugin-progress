@@ -83,6 +83,7 @@ export class ProgressServer {
   private extractor?: LLMExtractionEngine;
   private clients = new Map<WebSocket, string>();
   private sessions = new Map<string, SessionState>();
+  private extractionQueues = new Map<string, Promise<void>>();
   private cloudcliToReal = new Map<string, string>();
   private config: LLMConfig;
   private options: ProgressServerOptions;
@@ -217,7 +218,24 @@ export class ProgressServer {
       .slice(-MAX_INCREMENTAL_TURNS);
   }
 
-  private async runExtraction(
+  private runExtraction(
+    session: SessionState,
+    fullRebuild: boolean,
+  ): Promise<void> {
+    const previous = this.extractionQueues.get(session.sessionId) ?? Promise.resolve();
+    const task = previous
+      .catch(() => {})
+      .then(() => this.performExtraction(session, fullRebuild))
+      .finally(() => {
+        if (this.extractionQueues.get(session.sessionId) === task) {
+          this.extractionQueues.delete(session.sessionId);
+        }
+      });
+    this.extractionQueues.set(session.sessionId, task);
+    return task;
+  }
+
+  private async performExtraction(
     session: SessionState,
     fullRebuild: boolean,
   ): Promise<void> {

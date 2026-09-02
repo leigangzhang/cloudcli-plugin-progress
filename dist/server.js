@@ -30,6 +30,7 @@ export class ProgressServer {
     constructor(options = {}) {
         this.clients = new Map();
         this.sessions = new Map();
+        this.extractionQueues = new Map();
         this.cloudcliToReal = new Map();
         this.ruleExtractor = new RuleBasedExtractionEngine();
         this.options = options;
@@ -151,7 +152,20 @@ export class ProgressServer {
             .filter((turn) => !processedPromptIds.has(turn.promptId))
             .slice(-MAX_INCREMENTAL_TURNS);
     }
-    async runExtraction(session, fullRebuild) {
+    runExtraction(session, fullRebuild) {
+        const previous = this.extractionQueues.get(session.sessionId) ?? Promise.resolve();
+        const task = previous
+            .catch(() => { })
+            .then(() => this.performExtraction(session, fullRebuild))
+            .finally(() => {
+            if (this.extractionQueues.get(session.sessionId) === task) {
+                this.extractionQueues.delete(session.sessionId);
+            }
+        });
+        this.extractionQueues.set(session.sessionId, task);
+        return task;
+    }
+    async performExtraction(session, fullRebuild) {
         const extractor = this.chooseExtractor(session);
         if (!extractor)
             return;
