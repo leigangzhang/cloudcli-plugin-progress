@@ -28,6 +28,8 @@ export interface LLMExtractionEngineOptions {
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 const ASSISTANT_SUMMARY_LIMIT = 1000;
 const USER_TEXT_LIMIT = 1000;
+const MAX_STEPS_PER_GOAL = 12;
+const MAX_GOAL_CHARS = 4000;
 
 const SYSTEM_PROMPT = `You are a progress-tree updater. Given the latest conversation turns, update the latest goal and return only a ProgressTreePatch JSON object.
 
@@ -58,7 +60,7 @@ Return shape:
 Rules:
 1. Only update the latest goal. Never modify or reopen previous goals.
 2. Place relevant conversation turns as steps under the latest goal. Every returned goal must contain at least one step.
-3. Prefer continuing the latest goal; only start a new goal when the user clearly changes to a different, unrelated topic. For example, multiple markdown feature improvements belong to one goal.
+3. Prefer continuing the latest goal; only start a new goal when the user clearly changes to a different, unrelated topic. Use semantic similarity to decide whether a turn belongs to the latest goal, not just keyword overlap. Do not merge when it would make the latest goal exceed 12 steps or 4000 characters. For example, multiple markdown feature improvements belong to one goal.
 4. Keep steps at conversational granularity: one user turn normally maps to one step. Do not split one turn into multiple steps or merge unrelated turns.
 5. Preserve IDs from the tree digest for existing nodes. Generate stable IDs only for new nodes.
 6. Infer subject, description, and status only from user text and assistant summary. Never use reasoning or tool output.
@@ -312,6 +314,66 @@ function normalizeGoalStatus(goal: ProgressGoal): ProgressGoal {
   return goal;
 }
 
+function goalCharacterSize(goal: ProgressGoal): number {
+  const base = goal.subject.length + (goal.description?.length ?? 0);
+  const steps = goal.steps ?? [];
+  return steps.reduce(
+    (total, step) =>
+      total + step.subject.length + (step.description?.length ?? 0),
+    base,
+  );
+}
+
+function splitGoal(goal: ProgressGoal): ProgressGoal[] {
+  const steps = goal.steps ?? [];
+  if (
+    steps.length <= MAX_STEPS_PER_GOAL &&
+    goalCharacterSize(goal) <= MAX_GOAL_CHARS
+  ) {
+    return [normalizeGoalStatus(goal)];
+  }
+
+  const baseChars = goal.subject.length + (goal.description?.length ?? 0);
+  const groups: ProgressStep[][] = [];
+  let current: ProgressStep[] = [];
+  let currentChars = 0;
+
+  for (const step of steps) {
+    const stepChars = step.subject.length + (step.description?.length ?? 0);
+    const shouldStartNewGroup =
+      current.length >= MAX_STEPS_PER_GOAL ||
+      (current.length > 0 && currentChars + stepChars > MAX_GOAL_CHARS - baseChars);
+    if (shouldStartNewGroup) {
+      groups.push(current);
+      current = [step];
+      currentChars = stepChars;
+    } else {
+      current.push(step);
+      currentChars += stepChars;
+    }
+  }
+  if (current.length > 0) groups.push(current);
+
+  return groups.map((group, index) => {
+    const baseGoal = index === 0
+      ? { ...goal, steps: group }
+      : {
+          ...goal,
+          id: `${goal.id}-part-${index + 1}`,
+          subject: `${goal.subject} (${index + 1})`,
+          steps: group,
+        };
+    return normalizeGoalStatus(baseGoal);
+  });
+}
+
+function normalizeGoalSizes(tree: ProgressTree): ProgressTree {
+  return {
+    ...tree,
+    goals: tree.goals.flatMap(splitGoal),
+  };
+}
+
 function mergePatch(previous: ProgressTree, patch: ProgressTreePatch): ProgressTree {
   const deletedGoalIds = new Set(patch.deleteGoalIds);
   const deletedStepIds = new Set(patch.deleteStepIds);
@@ -351,10 +413,10 @@ function mergePatch(previous: ProgressTree, patch: ProgressTreePatch): ProgressT
   }
 
   const version = patch.version > previous.version ? patch.version : previous.version + 1;
-  return {
+  return normalizeGoalSizes({
     version,
     goals: Array.from(goals.values()).map(normalizeGoalStatus),
-  };
+  });
 }
 
 function extractJsonObject(text: string): string {
@@ -568,6 +630,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         if (fullTreeErrors.length > 0) {
           throw new Error(`Schema validation failed: ${fullTreeErrors.join('; ')}`);
         }
+        const normalizedFullTree = normalizeGoalSizes(fullTree);
         if (traceContext && this.trace) {
           this.trace({
             type: 'response',
@@ -579,7 +642,7 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
             outputTokens,
           });
         }
-        return fullTree;
+        return normalizedFullTree;
       }
 
       const parsedPatch = parsedResponse as ProgressTreePatch;
