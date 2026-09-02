@@ -186,8 +186,8 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
       version: 1,
       goals: [
         {
-          id: 'g1',
-          subject: 'Large goal',
+          id: 'g1-part-2',
+          subject: 'Large goal (2) (2)',
           description: 'Description',
           status: 'in_progress',
           steps: Array.from({ length: 13 }, (_, index) => ({
@@ -217,6 +217,10 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals).toHaveLength(2);
     expect(result.goals[0].steps).toHaveLength(12);
     expect(result.goals[1].steps).toHaveLength(1);
+    expect(result.goals[0].subject).toBe('Large goal');
+    expect(result.goals[1].subject).toBe('Large goal (2)');
+    expect(result.goals[0].id).toBe('g1');
+    expect(result.goals[1].id).toBe('g1-part-2');
   });
 
   it('includes first 1000 characters of user text and assistant summary but excludes raw thinking and tool text', async () => {

@@ -354,6 +354,18 @@ function goalCharacterSize(goal: ProgressGoal): number {
   );
 }
 
+function stripGoalPartSuffix(id: string): string {
+  return id.replace(/-part-\d+$/, '');
+}
+
+function stripGoalNumberSuffix(subject: string): string {
+  let cleaned = subject.trim();
+  while (/\s*[（(]\d+[）)]$/.test(cleaned)) {
+    cleaned = cleaned.replace(/\s*[（(]\d+[）)]$/, '').trim();
+  }
+  return cleaned || subject;
+}
+
 function splitGoal(goal: ProgressGoal): ProgressGoal[] {
   const steps = goal.steps ?? [];
   if (
@@ -384,13 +396,15 @@ function splitGoal(goal: ProgressGoal): ProgressGoal[] {
   }
   if (current.length > 0) groups.push(current);
 
+  const baseSubject = stripGoalNumberSuffix(goal.subject);
+  const baseId = stripGoalPartSuffix(goal.id);
   return groups.map((group, index) => {
     const baseGoal = index === 0
-      ? { ...goal, steps: group }
+      ? { ...goal, id: baseId, subject: baseSubject, steps: group }
       : {
           ...goal,
-          id: `${goal.id}-part-${index + 1}`,
-          subject: `${goal.subject} (${index + 1})`,
+          id: `${baseId}-part-${index + 1}`,
+          subject: `${baseSubject} (${index + 1})`,
           steps: group,
         };
     return normalizeGoalStatus(baseGoal);
@@ -640,14 +654,21 @@ export class LLMExtractionEngineImpl implements LLMExtractionEngine {
         groups[groups.length - 1].push(steps[i]);
       }
 
+      const baseSubject = stripGoalNumberSuffix(goal.subject);
+      const baseId = stripGoalPartSuffix(goal.id);
       return groups.map((group, index) => {
         if (index === 0) {
-          return normalizeGoalStatus({ ...goal, steps: group });
+          return normalizeGoalStatus({
+            ...goal,
+            id: baseId,
+            subject: baseSubject,
+            steps: group,
+          });
         }
         return normalizeGoalStatus({
           ...goal,
-          id: `${goal.id}-part-${index + 1}`,
-          subject: `${goal.subject} (${index + 1})`,
+          id: `${baseId}-part-${index + 1}`,
+          subject: `${baseSubject} (${index + 1})`,
           steps: group,
         });
       });
