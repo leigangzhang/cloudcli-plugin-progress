@@ -326,7 +326,7 @@ export class LLMExtractionEngineImpl {
                 temperature: 0,
                 system: SYSTEM_PROMPT,
                 messages: [{ role: 'user', content: prompt }],
-                thinking: { type: 'enabled' },
+                thinking: { type: 'disabled' },
                 output_config: { effort: 'low' },
                 response_format: { type: 'json_object' },
             };
