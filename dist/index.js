@@ -1471,6 +1471,39 @@ function escapeHtml2(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// src/ui/stats.ts
+function statItem(label, value, detail, colors) {
+  return `
+    <div style="min-width:0;">
+      <div style="color:${colors.muted};font-size:0.68rem;margin-bottom:3px;">${label}</div>
+      <div style="color:${colors.text};font-size:1rem;font-weight:600;line-height:1.2;">${value}</div>
+      <div style="color:${colors.muted};font-size:0.66rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detail}</div>
+    </div>
+  `;
+}
+function renderStatsPanel(tree, colors) {
+  const goals = tree.goals ?? [];
+  const steps = goals.flatMap((goal) => goal.steps ?? []);
+  const completedGoals = goals.filter((goal) => goal.status === "completed").length;
+  const completedSteps = steps.filter((step) => step.status === "completed").length;
+  const inProgressSteps = steps.filter((step) => step.status === "in_progress").length;
+  const pendingSteps = steps.length - completedSteps - inProgressSteps;
+  const percent = steps.length ? Math.round(completedSteps / steps.length * 100) : 0;
+  return `
+    <div class="pp-stats-panel" style="display:flex;flex-direction:column;gap:12px;padding:12px 14px;margin-bottom:12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;">
+      <div class="pp-stats-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">
+        ${statItem("Goals", `${goals.length}`, `${completedGoals} completed`, colors)}
+        ${statItem("Steps", `${steps.length}`, `${completedSteps} completed`, colors)}
+        ${statItem("In Progress", `${inProgressSteps}`, `${pendingSteps} pending`, colors)}
+        ${statItem("Progress", `${percent}%`, `${completedSteps}/${steps.length} steps`, colors)}
+      </div>
+      <div class="pp-progress-track" style="height:6px;background:${colors.surfaceHover};border-radius:999px;overflow:hidden;">
+        <div style="height:100%;width:${percent}%;background:${colors.accent};border-radius:999px;transition:width 0.2s;"></div>
+      </div>
+    </div>
+  `;
+}
+
 // src/index.ts
 var FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
 function ensureAssets() {
@@ -1481,11 +1514,11 @@ function ensureAssets() {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
-    .pp-mode-control { display:inline-flex; align-items:center; gap:2px; padding:2px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:6px; }
+    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; }
     .pp-mode-option { display:inline-flex; }
     .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
-    .pp-mode-option span { padding:3px 10px; border-radius:4px; font-size:0.7rem; line-height:1.4; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s; }
-    .pp-mode-option input:checked + span { background:var(--pp-accentSoft); color:var(--pp-accent); font-weight:500; }
+    .pp-mode-option span { padding:5px 13px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
+    .pp-mode-option input:checked + span { background:var(--pp-accent); color:#fff; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
     .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
     .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
     .pp-markdown h1 { font-size: 1.1em; }
@@ -1568,7 +1601,7 @@ function mount(container, api) {
         </button>
       </div>
     `;
-    root.innerHTML = header + renderProgressTree(
+    root.innerHTML = header + renderStatsPanel(tree, colors) + renderProgressTree(
       tree,
       {
         theme: api.context.theme,
