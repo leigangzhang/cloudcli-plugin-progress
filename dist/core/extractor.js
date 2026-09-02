@@ -6,7 +6,9 @@ const ASSISTANT_SUMMARY_LIMIT = 1000;
 const USER_TEXT_LIMIT = 1000;
 const MAX_STEPS_PER_GOAL = 12;
 const MAX_GOAL_CHARS = 4000;
-const SIMILARITY_THRESHOLD = 0.55;
+const TOPIC_SIMILARITY_MIN = 0.5;
+const TASK_CONTINUATION_MIN = 0.5;
+const BOUNDARY_CONFIDENCE_MAX = 0.7;
 const SYSTEM_PROMPT = `You are a progress-tree updater. Given the latest conversation turns, update the latest goal and return only a ProgressTreePatch JSON object.
 
 Return shape:
@@ -46,27 +48,31 @@ Rules:
 10. Keep each subject under 640 characters and each description under 960 characters. Summarize, do not restate the turn.
 11. Do not analyze completed history or explain decisions.
 12. Output only valid JSON that starts with "{" and ends with "}". No markdown fences, comments, reasoning, or extra text.`;
-const SIMILARITY_SYSTEM_PROMPT = `You are comparing consecutive conversation steps to decide whether they belong to the same goal.
+const SIMILARITY_SYSTEM_PROMPT = `You are deciding whether consecutive conversation steps belong to the same goal.
 
-Consider whether the two steps:
-- operate on the same module, object, or system;
-- continue, refine, or fix the same task;
-- clearly switch to a different task or topic.
+Judge both topic similarity and task continuation. A high topic similarity is not enough to keep the same goal when the user starts a new task stage, sub-task, or objective.
+
+Consider whether the right step:
+- continues, refines, fixes, tests, or revises the left step;
+- starts a new task stage, sub-task, or objective;
+- explicitly switches to a different action even if the topic stays similar.
 
 Return only JSON:
 {
-  "scores": [
+  "decisions": [
     {
       "left_prompt_id": "<left promptId>",
       "right_prompt_id": "<right promptId>",
-      "similarity": 0.85,
-      "same_goal": true,
+      "topic_similarity": 0.85,
+      "task_continuation": 0.75,
+      "boundary_confidence": 0.2,
+      "should_split": false,
       "reason": "<short reason>"
     }
   ]
 }
 
-"similarity" must be a number from 0.0 to 1.0. Set "same_goal" to false only for a clear topic change.`;
+All numeric fields must be from 0.0 to 1.0. Set "should_split" to true only when a clear task boundary exists.`;
 function isObject(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -496,11 +502,18 @@ export class LLMExtractionEngineImpl {
                 .join('');
             const jsonText = extractJsonObject(rawOutput);
             const parsed = JSON.parse(jsonText);
-            const scores = Array.isArray(parsed.scores) ? parsed.scores : [];
+            const decisions = Array.isArray(parsed.decisions) ? parsed.decisions : [];
             const groups = [[steps[0]]];
             for (let i = 1; i < steps.length; i++) {
-                const similarity = scores[i - 1]?.similarity;
-                if (typeof similarity === 'number' && similarity < SIMILARITY_THRESHOLD) {
+                const decision = decisions[i - 1];
+                const shouldSplit = decision?.should_split === true ||
+                    (typeof decision?.boundary_confidence === 'number' &&
+                        decision.boundary_confidence >= BOUNDARY_CONFIDENCE_MAX) ||
+                    (typeof decision?.task_continuation === 'number' &&
+                        decision.task_continuation < TASK_CONTINUATION_MIN) ||
+                    (typeof decision?.topic_similarity === 'number' &&
+                        decision.topic_similarity < TOPIC_SIMILARITY_MIN);
+                if (shouldSplit) {
                     groups.push([]);
                 }
                 groups[groups.length - 1].push(steps[i]);
