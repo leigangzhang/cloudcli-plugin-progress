@@ -47,9 +47,10 @@ Rules:
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
 6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
-8. Do not analyze completed history or produce a planning narrative. Only decide whether each turn continues the latest goal or starts a new goal.
-9. Return goals and steps in the same order as the conversation turns.
-10. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
+8. Do not analyze completed history or produce a planning narrative. Prefer continuing the latest goal; only start a new goal when the user clearly changes to a different, unrelated topic.
+9. Treat follow-up refinements, bug fixes, and feature improvements to the same subject as steps under the latest goal, not as separate goals. For example, multiple markdown feature improvements belong to one goal.
+10. Return goals and steps in the same order as the conversation turns.
+11. Your first generated character must be "{". Output ONLY valid JSON. Never output reasoning, explanations, markdown fences, or text before or after the JSON.`;
 
 interface TreeDigestGoal {
   id: string;
