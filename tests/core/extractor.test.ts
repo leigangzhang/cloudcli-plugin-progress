@@ -504,6 +504,26 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(systemPrompt).toContain('deleted');
   });
 
+  it('instructs the model to aggregate related refinements into one goal', async () => {
+    const client = mockClient({
+      text: patchResponse(1, [
+        {
+          id: 'g1',
+          subject: 'New',
+          description: '',
+          status: 'completed',
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    await engine.extract({ version: 0, goals: [] }, [turn()]);
+
+    const request = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const systemPrompt = request.system as string;
+    expect(systemPrompt).toContain('only start a new goal');
+    expect(systemPrompt).toContain('markdown feature improvements belong to one goal');
+  });
+
   it('promotes a goal to completed when all of its steps are completed', async () => {
     const tree: ProgressTree = {
       version: 1,
