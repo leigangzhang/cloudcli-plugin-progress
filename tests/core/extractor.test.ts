@@ -490,6 +490,15 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
           subject: 'New',
           description: '',
           status: 'completed',
+          steps: [
+            {
+              id: 's1',
+              subject: 'Step',
+              description: '',
+              status: 'completed',
+              promptId: 'p1',
+            },
+          ],
         },
       ]),
     });
@@ -512,6 +521,15 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
           subject: 'New',
           description: '',
           status: 'completed',
+          steps: [
+            {
+              id: 's1',
+              subject: 'Step',
+              description: '',
+              status: 'completed',
+              promptId: 'p1',
+            },
+          ],
         },
       ]),
     });
@@ -691,5 +709,28 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     });
     const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
     await expect(engine.extract(tree, [turn()])).rejects.toThrow(/description must be a string/);
+  });
+
+  it('rejects goals without steps', async () => {
+    const client = mockClient({
+      text: JSON.stringify({
+        version: 2,
+        upsertGoals: [
+          {
+            id: 'g1',
+            subject: 'Existing',
+            description: 'Goal description',
+            status: 'completed',
+          },
+        ],
+        deleteGoalIds: [],
+        deleteStepIds: [],
+      }),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+
+    await expect(engine.extract({ version: 0, goals: [] }, [turn()])).rejects.toThrow(
+      /steps must be a non-empty array/,
+    );
   });
 });
