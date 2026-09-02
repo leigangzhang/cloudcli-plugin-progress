@@ -17,7 +17,7 @@ Return a ProgressTreePatch object only:
 Rules:
 1. Only the most recent goal is provided. Previous goals are closed and must not be revisited.
 2. Each upsert goal must contain its stable "id". Include every affected step.
-3. Every affected node must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId".
+3. Every affected node must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
 6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.

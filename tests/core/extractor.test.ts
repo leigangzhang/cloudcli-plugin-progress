@@ -475,6 +475,28 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     );
   });
 
+  it('instructs the model to use only supported status values', async () => {
+    const client = mockClient({
+      text: patchResponse(1, [
+        {
+          id: 'g1',
+          subject: 'New',
+          description: '',
+          status: 'completed',
+        },
+      ]),
+    });
+    const engine = new LLMExtractionEngineImpl({ config: mockConfig(), client });
+    await engine.extract({ version: 0, goals: [] }, [turn()]);
+
+    const request = (client.messages.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const systemPrompt = request.system as string;
+    expect(systemPrompt).toContain('pending');
+    expect(systemPrompt).toContain('in_progress');
+    expect(systemPrompt).toContain('completed');
+    expect(systemPrompt).toContain('deleted');
+  });
+
   it('generates stable ids for missing patch ids without reusing previous nodes', async () => {
     const tree: ProgressTree = {
       version: 1,
