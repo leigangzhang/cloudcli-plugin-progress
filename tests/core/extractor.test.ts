@@ -666,7 +666,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(result.goals[0].steps?.map((step) => step.promptId)).toEqual(['p1', 'p2', 'p3']);
   });
 
-  it('splits goals when LLM similarity drops below the threshold', async () => {
+  it('splits goals when LLM detects a task boundary', async () => {
     const client = {
       messages: {
         create: vi
@@ -715,20 +715,24 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
               {
                 type: 'text',
                 text: JSON.stringify({
-                  scores: [
+                  decisions: [
                     {
                       left_prompt_id: 'p1',
                       right_prompt_id: 'p2',
-                      similarity: 0.8,
-                      same_goal: true,
-                      reason: 'related',
+                      topic_similarity: 0.9,
+                      task_continuation: 0.8,
+                      boundary_confidence: 0.2,
+                      should_split: false,
+                      reason: 'continued',
                     },
                     {
                       left_prompt_id: 'p2',
                       right_prompt_id: 'p3',
-                      similarity: 0.2,
-                      same_goal: false,
-                      reason: 'topic change',
+                      topic_similarity: 0.85,
+                      task_continuation: 0.3,
+                      boundary_confidence: 0.8,
+                      should_split: true,
+                      reason: 'new task stage',
                     },
                   ],
                 }),
