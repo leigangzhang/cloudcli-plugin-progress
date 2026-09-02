@@ -126,6 +126,31 @@ describe('buildTurns', () => {
     expect(turns[0].thinkingText).toBe('Deep thought');
     expect(turns[0].assistantText).toBe('Answer');
   });
+
+  it('extracts user and assistant text when content is a plain string', () => {
+    const entries: LogEntry[] = [
+      {
+        type: 'user',
+        uuid: 'u1',
+        promptId: 'p1',
+        timestamp: '2026-08-01T10:00:00Z',
+        message: { role: 'user', content: 'Plain question' },
+      },
+      {
+        type: 'assistant',
+        uuid: 'a1',
+        parentUuid: 'u1',
+        promptId: 'p1',
+        timestamp: '2026-08-01T10:00:01Z',
+        content: 'Plain answer',
+      },
+    ];
+
+    const turns = buildTurns(entries.map((entry, index) => ({ entry, lineNumber: index + 1 })));
+    expect(turns).toHaveLength(1);
+    expect(turns[0].userText).toBe('Plain question');
+    expect(turns[0].assistantText).toBe('Plain answer');
+  });
 });
 
 describe('buildTurnsFromLog', () => {
