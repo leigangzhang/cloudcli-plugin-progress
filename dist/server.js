@@ -25,6 +25,7 @@ function readBody(req) {
         req.on('error', reject);
     });
 }
+const MAX_INCREMENTAL_TURNS = 20;
 export class ProgressServer {
     constructor(options = {}) {
         this.clients = new Map();
@@ -146,7 +147,9 @@ export class ProgressServer {
                 processedPromptIds.add(step.promptId);
             }
         }
-        return turns.filter((turn) => !processedPromptIds.has(turn.promptId));
+        return turns
+            .filter((turn) => !processedPromptIds.has(turn.promptId))
+            .slice(-MAX_INCREMENTAL_TURNS);
     }
     async runExtraction(session, fullRebuild) {
         const extractor = this.chooseExtractor(session);

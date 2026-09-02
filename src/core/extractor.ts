@@ -242,6 +242,17 @@ function validatePatch(patch: ProgressTreePatch): string[] {
   return errors;
 }
 
+function normalizeGoalStatus(goal: ProgressGoal): ProgressGoal {
+  const steps = goal.steps;
+  if (!steps || steps.length === 0) return goal;
+  const activeSteps = steps.filter((step) => step.status !== 'deleted');
+  if (activeSteps.length === 0) return goal;
+  if (activeSteps.every((step) => step.status === 'completed')) {
+    return { ...goal, status: 'completed' };
+  }
+  return goal;
+}
+
 function mergePatch(previous: ProgressTree, patch: ProgressTreePatch): ProgressTree {
   const deletedGoalIds = new Set(patch.deleteGoalIds);
   const deletedStepIds = new Set(patch.deleteStepIds);
@@ -283,7 +294,7 @@ function mergePatch(previous: ProgressTree, patch: ProgressTreePatch): ProgressT
   const version = patch.version > previous.version ? patch.version : previous.version + 1;
   return {
     version,
-    goals: Array.from(goals.values()),
+    goals: Array.from(goals.values()).map(normalizeGoalStatus),
   };
 }
 

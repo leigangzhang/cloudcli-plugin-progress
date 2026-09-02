@@ -170,6 +170,18 @@ function validatePatch(patch) {
     }
     return errors;
 }
+function normalizeGoalStatus(goal) {
+    const steps = goal.steps;
+    if (!steps || steps.length === 0)
+        return goal;
+    const activeSteps = steps.filter((step) => step.status !== 'deleted');
+    if (activeSteps.length === 0)
+        return goal;
+    if (activeSteps.every((step) => step.status === 'completed')) {
+        return { ...goal, status: 'completed' };
+    }
+    return { ...goal, status: 'in_progress' };
+}
 function mergePatch(previous, patch) {
     const deletedGoalIds = new Set(patch.deleteGoalIds);
     const deletedStepIds = new Set(patch.deleteStepIds);
@@ -206,7 +218,7 @@ function mergePatch(previous, patch) {
     const version = patch.version > previous.version ? patch.version : previous.version + 1;
     return {
         version,
-        goals: Array.from(goals.values()),
+        goals: Array.from(goals.values()).map(normalizeGoalStatus),
     };
 }
 function extractJsonObject(text) {
