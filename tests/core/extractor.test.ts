@@ -225,7 +225,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(prompt).not.toContain(longReply);
   });
 
-  it('sends only the latest goal and latest step with full descriptions', async () => {
+  it('sends the latest goal and all of its steps with full descriptions', async () => {
     const tree: ProgressTree = {
       version: 2,
       goals: [
@@ -243,7 +243,13 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
           description: 'Goal description',
           status: 'in_progress',
           steps: [
-            { id: 'older-step', subject: 'Older', status: 'completed', promptId: 'older' },
+            {
+              id: 'older-step',
+              subject: 'Older',
+              description: 'Older step description',
+              status: 'completed',
+              promptId: 'older',
+            },
             {
               id: 'latest-step',
               subject: 'Current',
@@ -282,10 +288,11 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(prompt).toContain('Goal description');
     expect(prompt).toContain('latest-step');
     expect(prompt).toContain('Latest step description');
+    expect(prompt).toContain('older-step');
+    expect(prompt).toContain('Older step description');
     expect(prompt).not.toContain('old-goal');
     expect(prompt).not.toContain('old-step');
     expect(prompt).not.toContain('Closed history');
-    expect(prompt).not.toContain('older-step');
     expect(prompt).not.toContain('[truncated]');
   });
 

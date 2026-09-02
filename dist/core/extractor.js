@@ -9,14 +9,14 @@ const SYSTEM_PROMPT = `You are a session progress updater. Your job is to apply 
 Return a ProgressTreePatch object only:
 {
   "version": <next integer version>,
-  "upsertGoals": [only affected goal objects],
+  "upsertGoals": [only affected goal objects with their affected steps and descriptions],
   "deleteGoalIds": [],
   "deleteStepIds": []
 }
 
 Rules:
-1. Only the most recent goal is provided. Previous goals are closed and must not be revisited.
-2. Each upsert goal must contain its stable "id". Include every affected step.
+1. The tree digest contains only the most recent goal and all of its steps. Previous goals are closed and must not be revisited.
+2. Each upsert goal must contain its stable "id". Return only affected goal objects, and include every affected step under that goal.
 3. Every affected node must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
 4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
@@ -57,21 +57,18 @@ function buildTreeDigest(tree) {
     if (!latestGoal)
         return [];
     const steps = latestGoal.steps ?? [];
-    const latestStep = steps[steps.length - 1];
     return [{
             id: latestGoal.id,
             subject: latestGoal.subject,
             description: latestGoal.description,
             status: latestGoal.status,
-            steps: latestStep
-                ? [{
-                        id: latestStep.id,
-                        promptId: latestStep.promptId,
-                        subject: latestStep.subject,
-                        description: latestStep.description,
-                        status: latestStep.status,
-                    }]
-                : [],
+            steps: steps.map((step) => ({
+                id: step.id,
+                promptId: step.promptId,
+                subject: step.subject,
+                description: step.description,
+                status: step.status,
+            })),
         }];
 }
 function buildTurnInput(turn) {
@@ -180,7 +177,7 @@ function normalizeGoalStatus(goal) {
     if (activeSteps.every((step) => step.status === 'completed')) {
         return { ...goal, status: 'completed' };
     }
-    return { ...goal, status: 'in_progress' };
+    return goal;
 }
 function mergePatch(previous, patch) {
     const deletedGoalIds = new Set(patch.deleteGoalIds);
