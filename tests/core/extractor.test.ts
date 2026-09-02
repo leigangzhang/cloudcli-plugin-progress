@@ -468,7 +468,7 @@ describe('LLMExtractionEngineImpl patch extraction', () => {
     expect(client.messages.create).toHaveBeenCalledWith(
       expect.objectContaining({
         max_tokens: 8192,
-        thinking: { type: 'enabled' },
+        thinking: { type: 'disabled' },
         output_config: { effort: 'low' },
         response_format: { type: 'json_object' },
       }),
