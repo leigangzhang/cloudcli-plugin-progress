@@ -10,6 +10,7 @@ import { renderEmpty, renderError, renderLoading } from './ui/error.js';
 import { refreshIcon } from './ui/icons.js';
 import { themeColors } from './ui/theme.js';
 import { renderProgressTree } from './ui/tree.js';
+import { renderStatsPanel } from './ui/stats.js';
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
@@ -23,11 +24,11 @@ function ensureAssets(): void {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
-    .pp-mode-control { display:inline-flex; align-items:center; gap:2px; padding:2px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:6px; }
+    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; }
     .pp-mode-option { display:inline-flex; }
     .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
-    .pp-mode-option span { padding:3px 10px; border-radius:4px; font-size:0.7rem; line-height:1.4; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s; }
-    .pp-mode-option input:checked + span { background:var(--pp-accentSoft); color:var(--pp-accent); font-weight:500; }
+    .pp-mode-option span { padding:5px 13px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
+    .pp-mode-option input:checked + span { background:var(--pp-accent); color:#fff; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
     .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
     .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
     .pp-markdown h1 { font-size: 1.1em; }
@@ -122,6 +123,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     root.innerHTML =
       header +
+      renderStatsPanel(tree, colors) +
       renderProgressTree(
         tree,
         {
