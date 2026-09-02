@@ -34,16 +34,16 @@ const SYSTEM_PROMPT = `You are a session progress updater. Your job is to apply 
 Return a ProgressTreePatch object only:
 {
   "version": <next integer version>,
-  "upsertGoals": [only affected goal objects with their affected steps and descriptions],
+  "upsertGoals": [the latest goal object with all of its steps and descriptions],
   "deleteGoalIds": [],
   "deleteStepIds": []
 }
 
 Rules:
 1. The tree digest contains only the most recent goal and all of its steps. Previous goals are closed and must not be revisited.
-2. Each upsert goal must contain its stable "id". Return only affected goal objects, and include every affected step under that goal.
-3. Every affected node must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
-4. Preserve IDs from the tree digest whenever a node is affected. Create stable new IDs only for new nodes.
+2. Each upsert goal must contain its stable "id". Return the latest goal and include all of its steps.
+3. Every returned goal and step must return complete fields: goals require non-empty "id", "subject", "description", and "status"; steps additionally require non-empty "promptId". "status" must be exactly one of: "pending", "in_progress", "completed", "deleted".
+4. Preserve IDs from the tree digest whenever a node is returned. Create stable new IDs only for new nodes.
 5. Infer subjects, descriptions, and completion status from the user question and assistant summary. Do not infer from reasoning or tool output.
 6. Keep each subject under 640 characters and each description under 960 characters. Do not restate the turn text.
 7. Detect the dominant language used by the user and generate subjects and descriptions in that same language.
