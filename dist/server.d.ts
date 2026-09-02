@@ -14,6 +14,7 @@ export declare class ProgressServer {
     private extractor?;
     private clients;
     private sessions;
+    private extractionQueues;
     private cloudcliToReal;
     private config;
     private options;
@@ -30,6 +31,7 @@ export declare class ProgressServer {
     private getSessionTurns;
     private getPendingTurns;
     private runExtraction;
+    private performExtraction;
     private initializeSessionTree;
     private buildTraceContext;
     private traceExtraction;
