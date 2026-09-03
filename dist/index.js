@@ -1561,10 +1561,6 @@ function ensureAssets() {
     .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
     .pp-goal-header:hover { background:var(--pp-surfaceHover); }
     .pp-step-header:hover { background:var(--pp-surfaceHover); }
-    .pp-tooltip { position:relative; }
-    .pp-tooltip::after { content:attr(data-tooltip); position:absolute; left:0; top:calc(100% + 7px); z-index:20; width:max-content; max-width:320px; padding:7px 9px; background:var(--pp-surface); color:var(--pp-text); border:1px solid var(--pp-border); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.12); font-family:Georgia, 'Times New Roman', serif; font-size:0.72rem; line-height:1.35; white-space:normal; opacity:0; visibility:hidden; pointer-events:none; transition:opacity 0.12s, visibility 0.12s; }
-    .pp-tooltip[data-tooltip=""]::after { content:none; }
-    .pp-tooltip:hover::after { opacity:1; visibility:visible; }
     .pp-turn-panel { font-family: Georgia, 'Times New Roman', serif; }
     .pp-turn-panel .pp-markdown { font-family: inherit; }
 
@@ -1598,6 +1594,10 @@ function mount(container, api) {
   root.className = "pp-root";
   root.style.cssText = "height:100%;overflow-y:auto;box-sizing:border-box;padding:16px;font-family:" + FONT + ";";
   container.appendChild(root);
+  const tooltip = document.createElement("div");
+  tooltip.className = "pp-tooltip-pop";
+  tooltip.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;opacity:0;max-width:320px;padding:7px 9px;background:#fff;color:#1f2329;border:1px solid #e5e6eb;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,0.14);font-family:Georgia, "Times New Roman", serif;font-size:0.72rem;line-height:1.35;white-space:normal;transition:opacity 0.08s;';
+  container.appendChild(tooltip);
   let tree = { version: 0, goals: [] };
   let status = "idle";
   let extractionMode = "default";
@@ -1610,6 +1610,15 @@ function mount(container, api) {
   let currentProjectPath = null;
   let currentSessionId = null;
   let currentRealSessionId = null;
+  function showTooltip(text, x2, y2) {
+    tooltip.textContent = text;
+    tooltip.style.left = `${x2 + 12}px`;
+    tooltip.style.top = `${y2 + 12}px`;
+    tooltip.style.opacity = "1";
+  }
+  function hideTooltip() {
+    tooltip.style.opacity = "0";
+  }
   function render() {
     const dark = api.context.theme === "dark";
     const colors = themeColors(dark);
@@ -1618,6 +1627,9 @@ function mount(container, api) {
     for (const [key, value] of Object.entries(colors)) {
       root.style.setProperty(`--pp-${key}`, value);
     }
+    tooltip.style.background = colors.surface;
+    tooltip.style.borderColor = colors.border;
+    tooltip.style.color = colors.text;
     if (!api.context.project || !api.context.session) {
       root.innerHTML = renderEmpty(colors, "Select a project and session to view progress.");
       return;
@@ -1699,6 +1711,19 @@ function mount(container, api) {
         const mode = el.dataset.mode;
         if (mode !== extractionMode) void setMode(mode);
       });
+    });
+    root.querySelectorAll(".pp-tooltip").forEach((el) => {
+      const text = el.dataset.tooltip;
+      if (!text) return;
+      el.addEventListener("mouseenter", (event) => {
+        const mouse = event;
+        showTooltip(text, mouse.clientX, mouse.clientY);
+      });
+      el.addEventListener("mousemove", (event) => {
+        const mouse = event;
+        showTooltip(text, mouse.clientX, mouse.clientY);
+      });
+      el.addEventListener("mouseleave", hideTooltip);
     });
     const toggleAllBtn = root.querySelector("#pp-toggle-all");
     toggleAllBtn?.addEventListener("click", () => {
