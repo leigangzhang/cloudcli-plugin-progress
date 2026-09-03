@@ -6,10 +6,12 @@
   */
 
  /** Current application context provided to the plugin. */
- export interface PluginContext {
-   /** Active UI theme. */
-   theme: 'dark' | 'light';
-   /** Currently selected project, or null if none. */
+export interface PluginContext {
+  /** Active UI theme. */
+  theme: 'dark' | 'light';
+  /** Host locale when available, for example "zh-CN" or "en-US". */
+  locale?: string;
+  /** Currently selected project, or null if none. */
    project: { name: string; path: string } | null;
    /** Currently active session, or null if none. */
    session: { id: string; title: string } | null;

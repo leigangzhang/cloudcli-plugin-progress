@@ -1392,10 +1392,10 @@ function renderGoal(goal, options, colors) {
   );
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml2(goal.id)}">
-      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
+      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 15% 11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-size:0.8rem;font-weight:${goal.status === "in_progress" ? "600" : "500"};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ""}
@@ -1417,7 +1417,7 @@ function renderStep(step, options, colors, sequence, embedded = false) {
   const panel = expanded ? renderTurnPanel(step, options, colors) : "";
   const timestamp = formatTimestamp(options.turnRecords.get(step.promptId)?.timestamp ?? step.completedAt);
   const sequenceLabel = sequence ? `<span style="width:22px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.7rem;">${sequence}.</span>` : "";
-  const rowStyle = embedded ? "padding:6px 0;" : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
+  const rowStyle = embedded ? "padding:6px 15% 6px 0;" : `padding:10px 15% 10px 12px;border-bottom:1px solid ${colors.divider};`;
   const stepRowBackground = embedded ? "background:transparent;" : `background:${colors.surface};`;
   return `
     <div class="pp-step" data-step-id="${escapeHtml2(step.id)}" data-prompt-id="${escapeHtml2(step.promptId)}" style="${stepRowBackground}">
@@ -1518,15 +1518,16 @@ function renderStatsPanel(tree, colors) {
         ${statItem("In Progress", `${inProgressSteps}`, `${pendingSteps} pending`, colors)}
         ${statItem("Progress", `${percent}%`, `${completedSteps}/${steps.length} steps`, colors, colors.accent)}
       </div>
-      <div class="pp-progress-track" style="height:7px;background:${colors.surfaceHover};border-radius:999px;overflow:hidden;">
-        <div style="height:100%;width:${percent}%;background:${colors.accent};border-radius:999px;transition:width 0.2s;"></div>
-      </div>
     </div>
   `;
 }
 
 // src/index.ts
 var FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
+function isChineseLocale(api) {
+  const locale = api.context.locale ?? (typeof navigator !== "undefined" ? navigator.language : "");
+  return locale.toLowerCase().startsWith("zh");
+}
 function ensureAssets() {
   if (typeof document === "undefined") return;
   if (document.getElementById("pp-style")) return;
@@ -1544,7 +1545,8 @@ function ensureAssets() {
     .pp-mode-button.active { background:var(--pp-accent); border-color:var(--pp-accent); color:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.10); }
 
     .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-    .pp-stat-card { background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; padding:11px 12px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+    .pp-stat-card { background:linear-gradient(180deg, var(--pp-surface) 0%, var(--pp-surfaceHover) 100%); border:1px solid var(--pp-border); border-radius:8px; padding:11px 12px; box-shadow:0 3px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.08); transition:transform 0.15s, box-shadow 0.15s; }
+    .pp-stat-card:hover { transform:translateY(-1px); box-shadow:0 5px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.10); }
     .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
     .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
     .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1568,12 +1570,12 @@ function ensureAssets() {
     .pp-markdown pre { background: var(--pp-surfaceHover); border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; }
     .pp-markdown pre code { background: transparent; padding: 0; }
     .pp-markdown pre code, .pp-markdown code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
-    .pp-markdown code { background: var(--pp-accentSoft); color: var(--pp-accent); padding: 2px 5px; border-radius: 4px; font-size: 0.86em; }
-    .pp-markdown a { color: var(--pp-accent); text-decoration: none; }
-    .pp-markdown a:hover { text-decoration: underline; }
+    .pp-markdown code { background: transparent; color: inherit; padding: 0; border-radius: 0; font-size: 0.9em; }
+    .pp-markdown a { color: var(--pp-muted); text-decoration: underline; }
+    .pp-markdown a:hover { color: var(--pp-text); }
     .pp-markdown ul, .pp-markdown ol { margin: 0.55em 0; padding-left: 1.6em; }
     .pp-markdown li { margin: 0.22em 0; }
-    .pp-markdown blockquote { border-left: 3px solid var(--pp-accent); padding: 8px 12px; margin: 0.55em 0; color: var(--pp-muted); background:var(--pp-surfaceHover); border-radius:0 6px 6px 0; }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding: 8px 12px; margin: 0.55em 0; color: var(--pp-muted); background:var(--pp-surfaceHover); border-radius:0 6px 6px 0; }
     .pp-markdown table { border-collapse: collapse; margin: 0.55em 0; border:1px solid var(--pp-border); }
     .pp-markdown th { background:var(--pp-surfaceHover); color:var(--pp-muted); }
     .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 5px 8px; }
@@ -1620,16 +1622,18 @@ function mount(container, api) {
       root.innerHTML = renderError(colors, errorMessage ?? "Sync failed");
       return;
     }
+    const chinese = isChineseLocale(api);
     const refreshLabel = isRefreshing ? "Refreshing..." : "Refresh";
     const refreshDisabled = isRefreshing ? "opacity:0.6;cursor:not-allowed;" : "";
-    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.accentHover}'" onmouseout="this.style.background='${colors.accent}'"`;
+    const refreshStyle = isRefreshing ? `background:${colors.accent};border:1px solid ${colors.accent};color:#fff;` : `background:${colors.surface};border:1px solid ${colors.border};color:${colors.text};`;
+    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
     const modeControl = `
       <div class="pp-mode-buttons">
         ${["default", "progress-tree"].map((mode) => {
       const active = mode === extractionMode;
       const label = mode === "default" ? "Default" : "ProgressTree";
-      const summary = mode === "default" ? "Show a flat list of user queries without LLM extraction." : "Show goals and steps inferred from the session.";
+      const summary = mode === "default" ? chinese ? "\u4E0D\u4F7F\u7528 LLM\uFF0C\u76F4\u63A5\u5C55\u793A\u7528\u6237\u63D0\u95EE\u5217\u8868\u3002" : "Show a flat list of user queries without LLM extraction." : chinese ? "\u5C55\u793A\u4ECE\u4F1A\u8BDD\u4E2D\u63A8\u65AD\u51FA\u7684\u76EE\u6807\u4E0E\u6B65\u9AA4\u3002" : "Show goals and steps inferred from the session.";
       return `<button type="button" class="pp-mode-button${active ? " active" : ""}" data-mode="${mode}" title="${summary}" aria-pressed="${active}">${label}</button>`;
     }).join("")}
       </div>
@@ -1638,11 +1642,11 @@ function mount(container, api) {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0;">
           <div class="pp-title">Progress</div>
-          <div class="pp-subtitle">Auto-track goals and steps from your session.</div>
+          <div class="pp-subtitle">${chinese ? "\u81EA\u52A8\u8DDF\u8E2A\u4F1A\u8BDD\u4E2D\u7684\u76EE\u6807\u4E0E\u6B65\u9AA4\u3002" : "Auto-track goals and steps from your session."}</div>
         </div>
         <div class="pp-header-actions">
           ${modeControl}
-          <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+          <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshStyle}${refreshDisabled}" ${refreshHover}>
             <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
           </button>
         </div>

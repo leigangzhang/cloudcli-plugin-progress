@@ -35,9 +35,6 @@ export function renderStatsPanel(tree: ProgressTree, colors: ThemeColors): strin
         ${statItem('In Progress', `${inProgressSteps}`, `${pendingSteps} pending`, colors)}
         ${statItem('Progress', `${percent}%`, `${completedSteps}/${steps.length} steps`, colors, colors.accent)}
       </div>
-      <div class="pp-progress-track" style="height:7px;background:${colors.surfaceHover};border-radius:999px;overflow:hidden;">
-        <div style="height:100%;width:${percent}%;background:${colors.accent};border-radius:999px;transition:width 0.2s;"></div>
-      </div>
     </div>
   `;
 }

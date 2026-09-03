@@ -55,10 +55,10 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
   );
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml(goal.id)}">
-      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
+      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 15% 11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-size:0.8rem;font-weight:${goal.status === 'in_progress' ? '600' : '500'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}
@@ -102,8 +102,8 @@ function renderStep(
     ? `<span style="width:22px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.7rem;">${sequence}.</span>`
     : '';
   const rowStyle = embedded
-    ? 'padding:6px 0;'
-    : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
+    ? 'padding:6px 15% 6px 0;'
+    : `padding:10px 15% 10px 12px;border-bottom:1px solid ${colors.divider};`;
   const stepRowBackground = embedded ? 'background:transparent;' : `background:${colors.surface};`;
   return `
     <div class="pp-step" data-step-id="${escapeHtml(step.id)}" data-prompt-id="${escapeHtml(step.promptId)}" style="${stepRowBackground}">
