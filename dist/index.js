@@ -1483,7 +1483,7 @@ function renderEmptyBlock(label, colors) {
 }
 function renderMarkdown(text, _colors) {
   const html = g.parse(text, { async: false });
-  return `<div class="pp-markdown" style="font-size:0.875rem;line-height:1.5;">${html}</div>`;
+  return `<div class="pp-markdown" style="font-size:0.75rem;line-height:1.5;">${html}</div>`;
 }
 function formatTimestamp(value) {
   if (!value) return "";
@@ -1568,7 +1568,7 @@ function ensureAssets() {
     .pp-turn-panel { font-family: Georgia, 'Times New Roman', serif; }
     .pp-turn-panel .pp-markdown { font-family: inherit; }
 
-    .pp-markdown { font-family: inherit; font-size:0.875rem; line-height:1.5; color:var(--pp-text); }
+    .pp-markdown { font-family: inherit; font-size:0.75rem; line-height:1.5; color:var(--pp-text); }
     .pp-markdown p { margin: 0 0 0.55em; }
     .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.7em 0 0.35em; font-weight: 600; line-height:1.3; }
     .pp-markdown h1 { font-size:1.05em; border-bottom:1px solid var(--pp-divider); padding-bottom:4px; }
