@@ -76,6 +76,7 @@ function themeColors(dark) {
     muted: "#9aa0a6",
     accent: "#4c88ff",
     accentHover: "#6ba1ff",
+    deepBlue: "#8ab4f8",
     dim: "#2a2b2f",
     accentSoft: "rgba(76,136,255,0.16)",
     success: "#34c724",
@@ -83,7 +84,8 @@ function themeColors(dark) {
     danger: "#f54a45",
     successSoft: "rgba(52,199,36,0.16)",
     warningSoft: "rgba(255,136,0,0.16)",
-    dangerSoft: "rgba(245,74,69,0.16)"
+    dangerSoft: "rgba(245,74,69,0.16)",
+    turnPanel: "#2a2826"
   } : {
     bg: "#f5f6f7",
     surface: "#ffffff",
@@ -94,6 +96,7 @@ function themeColors(dark) {
     muted: "#6f7785",
     accent: "#3370ff",
     accentHover: "#2e5bd7",
+    deepBlue: "#1f4e79",
     dim: "#f2f3f5",
     accentSoft: "#eff4ff",
     success: "#34c724",
@@ -101,7 +104,8 @@ function themeColors(dark) {
     danger: "#f54a45",
     successSoft: "#eaf7e9",
     warningSoft: "#fff4e5",
-    dangerSoft: "#fdecec"
+    dangerSoft: "#fdecec",
+    turnPanel: "#f6f4f1"
   };
 }
 
@@ -1360,10 +1364,11 @@ var STATUS_COLORS = (c) => ({
 });
 function statusBadge(status, colors) {
   const style = STATUS_COLORS(colors)[status];
-  return `<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:4px;font-size:0.68rem;font-weight:500;color:${style.fg};background:${style.bg};"><span style="width:6px;height:6px;border-radius:50%;background:${style.dot};flex-shrink:0;"></span>${STATUS_LABELS[status]}</span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:5px;font-family:Georgia, 'Times New Roman', serif;font-size:0.8rem;font-weight:700;color:${colors.deepBlue};background:${style.bg};"><span style="width:6px;height:6px;border-radius:50%;background:${style.dot};flex-shrink:0;"></span>${STATUS_LABELS[status]}</span>`;
 }
 
 // src/ui/tree.ts
+var SERIF_FONT = "Georgia, 'Times New Roman', serif";
 function renderProgressTree(tree, options, colors) {
   if (tree.goals.length === 0) {
     return `<div class="pp-tree-empty" style="background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;padding:28px 16px;text-align:center;color:${colors.muted};font-size:0.78rem;">No goals tracked yet.</div>`;
@@ -1382,12 +1387,16 @@ function renderGoal(goal, options, colors) {
   const toggle = expanded ? chevronDown() : chevronRight();
   const title = escapeHtml2(goal.subject);
   const description = goal.description ? escapeHtml2(goal.description) : "";
+  const timestamp = formatTimestamp(
+    goal.startedAt ?? goal.steps?.map((step) => options.turnRecords.get(step.promptId)?.timestamp).find((value) => Boolean(value))
+  );
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml2(goal.id)}">
       <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
         <span style="font-size:0.8rem;font-weight:${goal.status === "in_progress" ? "600" : "500"};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ""}
     </div>
@@ -1406,6 +1415,7 @@ function renderStep(step, options, colors, sequence, embedded = false) {
   const statusColor = step.status === "completed" ? colors.success : step.status === "in_progress" ? colors.accent : step.status === "deleted" ? colors.danger : colors.muted;
   const icon = step.status === "completed" ? `<span style="color:${statusColor};display:inline-flex;">${completedIcon}</span>` : `<span style="color:${statusColor};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : "";
+  const timestamp = formatTimestamp(options.turnRecords.get(step.promptId)?.timestamp ?? step.completedAt);
   const sequenceLabel = sequence ? `<span style="width:22px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.7rem;">${sequence}.</span>` : "";
   const rowStyle = embedded ? "padding:6px 0;" : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
   const stepRowBackground = embedded ? "background:transparent;" : `background:${colors.surface};`;
@@ -1414,7 +1424,8 @@ function renderStep(step, options, colors, sequence, embedded = false) {
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-size:0.76rem;font-weight:${step.status === "in_progress" ? "600" : "400"};color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
       </div>
       ${panel}
     </div>
@@ -1430,7 +1441,7 @@ function renderTurnPanel(step, options, colors) {
   const reasoningBlock = renderPlainDetails("Model reasoning", turn.thinkingText, colors);
   const toolBlock = renderPlainDetails("Tool activity", turn.toolText, colors);
   return `
-    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-left:3px solid ${colors.accent};border-radius:0 6px 6px 0;background:${colors.accentSoft};" onclick="event.stopPropagation();">
+    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-left:3px solid ${colors.accent};border-radius:0 6px 6px 0;background:${colors.turnPanel};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${toolBlock}
@@ -1467,7 +1478,14 @@ function renderEmptyBlock(label, colors) {
 }
 function renderMarkdown(text, _colors) {
   const html = g.parse(text, { async: false });
-  return `<div class="pp-markdown" style="font-size:0.75rem;line-height:1.5;">${html}</div>`;
+  return `<div class="pp-markdown" style="font-size:0.82rem;line-height:1.6;">${html}</div>`;
+}
+function formatTimestamp(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 function escapeHtml2(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -1477,7 +1495,7 @@ function escapeHtml2(value) {
 function statItem(label, value, detail, colors, valueColor) {
   const color = valueColor ?? colors.text;
   return `
-    <div class="pp-stat-item" style="min-width:0;">
+    <div class="pp-stat-card" style="min-width:0;">
       <div class="pp-stat-label">${label}</div>
       <div class="pp-stat-value" style="color:${color};">${value}</div>
       <div class="pp-stat-detail">${detail}</div>
@@ -1493,14 +1511,14 @@ function renderStatsPanel(tree, colors) {
   const pendingSteps = steps.length - completedSteps - inProgressSteps;
   const percent = steps.length ? Math.round(completedSteps / steps.length * 100) : 0;
   return `
-    <div class="pp-stats-panel" style="display:flex;flex-direction:column;gap:12px;padding:12px 14px;margin-bottom:12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;">
+    <div class="pp-stats-panel" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
       <div class="pp-stats-grid">
         ${statItem("Goals", `${goals.length}`, `${completedGoals} completed`, colors)}
         ${statItem("Steps", `${steps.length}`, `${completedSteps} completed`, colors)}
         ${statItem("In Progress", `${inProgressSteps}`, `${pendingSteps} pending`, colors)}
         ${statItem("Progress", `${percent}%`, `${completedSteps}/${steps.length} steps`, colors, colors.accent)}
       </div>
-      <div class="pp-progress-track" style="height:6px;background:${colors.surfaceHover};border-radius:999px;overflow:hidden;">
+      <div class="pp-progress-track" style="height:7px;background:${colors.surfaceHover};border-radius:999px;overflow:hidden;">
         <div style="height:100%;width:${percent}%;background:${colors.accent};border-radius:999px;transition:width 0.2s;"></div>
       </div>
     </div>
@@ -1517,13 +1535,16 @@ function ensureAssets() {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
-    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
-    .pp-mode-option { display:inline-flex; }
-    .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
-    .pp-mode-option span { padding:5px 12px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
-    .pp-mode-option input:checked + span { background:var(--pp-accent); color:#fff; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+    .pp-title { font-size:0.96rem; font-weight:650; color:var(--pp-text); }
+    .pp-subtitle { font-size:0.68rem; line-height:1.35; color:var(--pp-muted); }
+    .pp-header-actions { display:flex; align-items:center; gap:8px; }
+    .pp-mode-buttons { display:inline-flex; gap:6px; }
+    .pp-mode-button { display:inline-flex; align-items:center; padding:5px 11px; border:1px solid var(--pp-border); border-radius:6px; background:var(--pp-surface); color:var(--pp-muted); font-size:0.72rem; font-weight:500; transition:background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s; }
+    .pp-mode-button:hover { border-color:var(--pp-accent); color:var(--pp-accent); }
+    .pp-mode-button.active { background:var(--pp-accent); border-color:var(--pp-accent); color:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.10); }
 
-    .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .pp-stat-card { background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; padding:11px 12px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
     .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
     .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
     .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1534,6 +1555,8 @@ function ensureAssets() {
     .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
     .pp-goal-header:hover { background:var(--pp-surfaceHover); }
     .pp-step-header:hover { background:var(--pp-surfaceHover); }
+    .pp-turn-panel { font-family: Georgia, 'Times New Roman', serif; }
+    .pp-turn-panel .pp-markdown { font-family: Georgia, 'Times New Roman', serif; }
 
     .pp-markdown { font-size:0.78rem; line-height:1.65; color:var(--pp-text); }
     .pp-markdown p { margin: 0 0 0.55em; }
@@ -1602,23 +1625,27 @@ function mount(container, api) {
     const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.accentHover}'" onmouseout="this.style.background='${colors.accent}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
     const modeControl = `
-      <div class="pp-mode-control">
+      <div class="pp-mode-buttons">
         ${["default", "progress-tree"].map((mode) => {
       const active = mode === extractionMode;
       const label = mode === "default" ? "Default" : "ProgressTree";
-      return `<label class="pp-mode-option"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? "checked" : ""}><span>${label}</span></label>`;
+      const summary = mode === "default" ? "Show a flat list of user queries without LLM extraction." : "Show goals and steps inferred from the session.";
+      return `<button type="button" class="pp-mode-button${active ? " active" : ""}" data-mode="${mode}" title="${summary}" aria-pressed="${active}">${label}</button>`;
     }).join("")}
       </div>
     `;
     const header = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
-          <div style="font-size:0.92rem;font-weight:600;color:${colors.text};">Progress</div>
-          ${modeControl}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0;">
+          <div class="pp-title">Progress</div>
+          <div class="pp-subtitle">Auto-track goals and steps from your session.</div>
         </div>
-        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
-          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
-        </button>
+        <div class="pp-header-actions">
+          ${modeControl}
+          <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+            <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
+          </button>
+        </div>
       </div>
     `;
     root.innerHTML = header + renderStatsPanel(tree, colors) + renderProgressTree(
@@ -1652,9 +1679,9 @@ function mount(container, api) {
     });
     const refreshBtn = root.querySelector("#pp-refresh");
     refreshBtn?.addEventListener("click", () => void refresh());
-    root.querySelectorAll('input[name="pp-extraction-mode"]').forEach((el) => {
-      el.addEventListener("change", () => {
-        const mode = el.value;
+    root.querySelectorAll(".pp-mode-button").forEach((el) => {
+      el.addEventListener("click", () => {
+        const mode = el.dataset.mode;
         if (mode !== extractionMode) void setMode(mode);
       });
     });
@@ -1690,13 +1717,43 @@ function mount(container, api) {
       status = res.status;
       extractionMode = res.extractionMode ?? "default";
       errorMessage = res.error;
+      void hydrateTurnRecords();
       return;
     }
     if (res && typeof res === "object" && "error" in res) {
       status = "error";
       errorMessage = res.error;
+      void hydrateTurnRecords();
       return;
     }
+  }
+  async function hydrateTurnRecords(nextTree = tree) {
+    const sid = currentRealSessionId ?? currentSessionId;
+    if (!sid) return;
+    const promptIds = Array.from(
+      new Set(
+        nextTree.goals.flatMap((goal) => goal.steps ?? []).map((step) => step.promptId)
+      )
+    ).filter((promptId) => !turnRecords.has(promptId));
+    if (promptIds.length === 0) return;
+    let changed = false;
+    await Promise.all(
+      promptIds.map(async (promptId) => {
+        try {
+          const res = await api.rpc(
+            "GET",
+            `/turn?sessionId=${encodeURIComponent(sid)}&promptId=${encodeURIComponent(promptId)}`
+          );
+          if (res && typeof res === "object" && "promptId" in res) {
+            turnRecords.set(promptId, res);
+            changed = true;
+          }
+        } catch (err) {
+          console.error("Failed to load turn timestamp:", err.message);
+        }
+      })
+    );
+    if (changed) render();
   }
   async function subscribe(projectPath, sessionId) {
     if (ws) {
@@ -1718,6 +1775,7 @@ function mount(container, api) {
       const typed = msg;
       if (typed.type === "progress") {
         tree = msg.tree;
+        void hydrateTurnRecords(tree);
       } else if (typed.type === "status") {
         const newStatus = msg.status;
         if (status === "syncing" && (newStatus === "idle" || newStatus === "error")) {

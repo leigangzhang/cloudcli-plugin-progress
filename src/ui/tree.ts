@@ -10,6 +10,8 @@ import type { ThemeColors } from './theme.js';
 import { statusBadge } from './badge.js';
 import { chevronDown, chevronRight } from './icons.js';
 
+const SERIF_FONT = "Georgia, 'Times New Roman', serif";
+
 export interface TreeRenderOptions {
   theme: 'dark' | 'light';
   extractionMode?: ExtractionMode;
@@ -45,12 +47,19 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
   const toggle = expanded ? chevronDown() : chevronRight();
   const title = escapeHtml(goal.subject);
   const description = goal.description ? escapeHtml(goal.description) : '';
+  const timestamp = formatTimestamp(
+    goal.startedAt ??
+      goal.steps
+        ?.map((step) => options.turnRecords.get(step.promptId)?.timestamp)
+        .find((value): value is string => Boolean(value)),
+  );
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml(goal.id)}">
       <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
         <span style="font-size:0.8rem;font-weight:${goal.status === 'in_progress' ? '600' : '500'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}
     </div>
@@ -88,6 +97,7 @@ function renderStep(
     ? `<span style="color:${statusColor};display:inline-flex;">${completedIcon}</span>`
     : `<span style="color:${statusColor};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : '';
+  const timestamp = formatTimestamp(options.turnRecords.get(step.promptId)?.timestamp ?? step.completedAt);
   const sequenceLabel = sequence
     ? `<span style="width:22px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.7rem;">${sequence}.</span>`
     : '';
@@ -100,7 +110,8 @@ function renderStep(
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-size:0.76rem;font-weight:${step.status === 'in_progress' ? '600' : '400'};color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
       </div>
       ${panel}
     </div>
@@ -119,7 +130,7 @@ function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors:
   const reasoningBlock = renderPlainDetails('Model reasoning', turn.thinkingText, colors);
   const toolBlock = renderPlainDetails('Tool activity', turn.toolText, colors);
   return `
-    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-left:3px solid ${colors.accent};border-radius:0 6px 6px 0;background:${colors.accentSoft};" onclick="event.stopPropagation();">
+    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-left:3px solid ${colors.accent};border-radius:0 6px 6px 0;background:${colors.turnPanel};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${toolBlock}
@@ -164,7 +175,15 @@ function renderEmptyBlock(label: string, colors: ThemeColors): string {
 
 function renderMarkdown(text: string, _colors: ThemeColors): string {
   const html = marked.parse(text, { async: false }) as string;
-  return `<div class="pp-markdown" style="font-size:0.75rem;line-height:1.5;">${html}</div>`;
+  return `<div class="pp-markdown" style="font-size:0.82rem;line-height:1.6;">${html}</div>`;
+}
+
+function formatTimestamp(value?: string): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function escapeHtml(value: string): string {

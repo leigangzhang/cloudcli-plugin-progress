@@ -24,13 +24,16 @@ function ensureAssets(): void {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
-    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
-    .pp-mode-option { display:inline-flex; }
-    .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
-    .pp-mode-option span { padding:5px 12px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
-    .pp-mode-option input:checked + span { background:var(--pp-accent); color:#fff; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+    .pp-title { font-size:0.96rem; font-weight:650; color:var(--pp-text); }
+    .pp-subtitle { font-size:0.68rem; line-height:1.35; color:var(--pp-muted); }
+    .pp-header-actions { display:flex; align-items:center; gap:8px; }
+    .pp-mode-buttons { display:inline-flex; gap:6px; }
+    .pp-mode-button { display:inline-flex; align-items:center; padding:5px 11px; border:1px solid var(--pp-border); border-radius:6px; background:var(--pp-surface); color:var(--pp-muted); font-size:0.72rem; font-weight:500; transition:background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s; }
+    .pp-mode-button:hover { border-color:var(--pp-accent); color:var(--pp-accent); }
+    .pp-mode-button.active { background:var(--pp-accent); border-color:var(--pp-accent); color:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.10); }
 
-    .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .pp-stat-card { background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; padding:11px 12px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
     .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
     .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
     .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -41,6 +44,8 @@ function ensureAssets(): void {
     .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
     .pp-goal-header:hover { background:var(--pp-surfaceHover); }
     .pp-step-header:hover { background:var(--pp-surfaceHover); }
+    .pp-turn-panel { font-family: Georgia, 'Times New Roman', serif; }
+    .pp-turn-panel .pp-markdown { font-family: Georgia, 'Times New Roman', serif; }
 
     .pp-markdown { font-size:0.78rem; line-height:1.65; color:var(--pp-text); }
     .pp-markdown p { margin: 0 0 0.55em; }
@@ -118,23 +123,30 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     const refreshHover = isRefreshing ? '' : `onmouseover="this.style.background='${colors.accentHover}'" onmouseout="this.style.background='${colors.accent}'"`;
     const iconClass = isRefreshing ? 'pp-spin' : '';
     const modeControl = `
-      <div class="pp-mode-control">
+      <div class="pp-mode-buttons">
         ${(['default', 'progress-tree'] as ExtractionMode[]).map((mode) => {
           const active = mode === extractionMode;
           const label = mode === 'default' ? 'Default' : 'ProgressTree';
-          return `<label class="pp-mode-option"><input type="radio" name="pp-extraction-mode" value="${mode}" ${active ? 'checked' : ''}><span>${label}</span></label>`;
+          const summary =
+            mode === 'default'
+              ? 'Show a flat list of user queries without LLM extraction.'
+              : 'Show goals and steps inferred from the session.';
+          return `<button type="button" class="pp-mode-button${active ? ' active' : ''}" data-mode="${mode}" title="${summary}" aria-pressed="${active}">${label}</button>`;
         }).join('')}
       </div>
     `;
     const header = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
-          <div style="font-size:0.92rem;font-weight:600;color:${colors.text};">Progress</div>
-          ${modeControl}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-width:0;">
+          <div class="pp-title">Progress</div>
+          <div class="pp-subtitle">Auto-track goals and steps from your session.</div>
         </div>
-        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
-          <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
-        </button>
+        <div class="pp-header-actions">
+          ${modeControl}
+          <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+            <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
+          </button>
+        </div>
       </div>
     `;
 
@@ -175,9 +187,9 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     const refreshBtn = root.querySelector('#pp-refresh');
     refreshBtn?.addEventListener('click', () => void refresh());
-    root.querySelectorAll<HTMLInputElement>('input[name="pp-extraction-mode"]').forEach((el) => {
-      el.addEventListener('change', () => {
-        const mode = el.value as ExtractionMode;
+    root.querySelectorAll<HTMLButtonElement>('.pp-mode-button').forEach((el) => {
+      el.addEventListener('click', () => {
+        const mode = el.dataset.mode as ExtractionMode;
         if (mode !== extractionMode) void setMode(mode);
       });
     });
@@ -215,13 +227,47 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
       status = res.status;
       extractionMode = res.extractionMode ?? 'default';
       errorMessage = res.error;
+      void hydrateTurnRecords();
       return;
     }
     if (res && typeof res === 'object' && 'error' in res) {
       status = 'error';
       errorMessage = (res as { error: string }).error;
+      void hydrateTurnRecords();
       return;
     }
+  }
+
+  async function hydrateTurnRecords(nextTree: ProgressTree = tree): Promise<void> {
+    const sid = currentRealSessionId ?? currentSessionId;
+    if (!sid) return;
+    const promptIds = Array.from(
+      new Set(
+        nextTree.goals
+          .flatMap((goal) => goal.steps ?? [])
+          .map((step) => step.promptId),
+      ),
+    ).filter((promptId) => !turnRecords.has(promptId));
+    if (promptIds.length === 0) return;
+
+    let changed = false;
+    await Promise.all(
+      promptIds.map(async (promptId) => {
+        try {
+          const res = await api.rpc(
+            'GET',
+            `/turn?sessionId=${encodeURIComponent(sid)}&promptId=${encodeURIComponent(promptId)}`,
+          );
+          if (res && typeof res === 'object' && 'promptId' in res) {
+            turnRecords.set(promptId, res as TurnResponse);
+            changed = true;
+          }
+        } catch (err) {
+          console.error('Failed to load turn timestamp:', (err as Error).message);
+        }
+      }),
+    );
+    if (changed) render();
   }
 
   async function subscribe(projectPath: string, sessionId: string): Promise<void> {
@@ -247,6 +293,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
       const typed = msg as { type: string };
       if (typed.type === 'progress') {
         tree = (msg as { tree: ProgressTree }).tree;
+        void hydrateTurnRecords(tree);
       } else if (typed.type === 'status') {
         const newStatus = (msg as { status: ProgressResponse['status'] }).status;
         if (status === 'syncing' && (newStatus === 'idle' || newStatus === 'error')) {
