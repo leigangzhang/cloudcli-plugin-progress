@@ -72,9 +72,9 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
         <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};">${title}</span>
-        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
+        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.8rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
         ${steps.length > 0
-          ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml(goal.id)}" title="${goalToggleTitle}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? '-' : '+'}</button>`
+          ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml(goal.id)}" title="${goalToggleTitle}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 9px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:5px;color:#fff;font-size:0.8rem;font-weight:700;line-height:1.2;">${goalFullyExpanded ? '-' : '+'}</button>`
           : ''}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}
@@ -113,7 +113,7 @@ function renderStep(
     : '';
   const rowStyle = embedded
     ? 'padding:6px 15% 6px 0;'
-    : `padding:10px 15% 10px 12px;border-bottom:1px solid ${colors.divider};`;
+    : `padding:10px 7% 10px 12px;border-bottom:1px solid ${colors.divider};`;
   const stepRowBackground = embedded ? 'background:transparent;' : `background:${colors.surface};`;
   return `
     <div class="pp-step" data-step-id="${escapeHtml(step.id)}" data-prompt-id="${escapeHtml(step.promptId)}" style="${stepRowBackground}">
@@ -121,7 +121,7 @@ function renderStep(
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
         <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
-        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
+        ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.78rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
       </div>
       ${panel}
     </div>
