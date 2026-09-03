@@ -62,9 +62,9 @@ function ensureAssets(): void {
     .pp-markdown h2 { font-size:0.98em; }
     .pp-markdown h3 { font-size:0.9em; }
     .pp-markdown h4 { font-size:0.84em; }
-    .pp-markdown pre { background: #000; color: #e5e6eb; border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; }
-    .pp-markdown pre code { background: transparent; padding: 0; color: inherit; }
-    .pp-markdown pre code, .pp-markdown code { font-family: 'Courier New', Courier, monospace; }
+    .pp-markdown pre { background: #000; color: #e5e6eb; border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; font-size:0.75rem; }
+    .pp-markdown pre code { background: transparent; padding: 0; color: inherit; font-family: inherit; font-size:0.75rem; }
+    .pp-markdown code { font-family: 'Courier New', Courier, monospace; }
     .pp-markdown code { background: transparent; color: inherit; padding: 0; border-radius: 0; font-size: 0.9em; }
     .pp-markdown a { color: var(--pp-muted); text-decoration: underline; }
     .pp-markdown a:hover { color: var(--pp-text); }
