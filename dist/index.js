@@ -1389,6 +1389,7 @@ function renderGoal(goal, options, colors) {
   const description = goal.description ? escapeHtml2(goal.description) : "";
   const steps = goal.steps ?? [];
   const goalFullyExpanded = expanded && steps.length > 0 && steps.every((step) => options.turnExpanded.has(step.id));
+  const goalToggleTitle = goalFullyExpanded ? options.chinese ? "\u6298\u53E0\u6240\u6709\u6B65\u9AA4\u548C\u4F1A\u8BDD" : "Collapse all steps and sessions" : options.chinese ? "\u5C55\u5F00\u6240\u6709\u6B65\u9AA4\u548C\u4F1A\u8BDD" : "Expand all steps and sessions";
   const timestamp = formatTimestamp(
     goal.startedAt ?? steps?.map((step) => options.turnRecords.get(step.promptId)?.timestamp).find((value) => Boolean(value))
   );
@@ -1399,7 +1400,7 @@ function renderGoal(goal, options, colors) {
         ${statusBadge(goal.status, colors)}
         <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
-        ${steps.length > 0 ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml2(goal.id)}" title="${goalFullyExpanded ? "Collapse all steps and sessions" : "Expand all steps and sessions"}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? "-" : "+"}</button>` : ""}
+        ${steps.length > 0 ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml2(goal.id)}" title="${goalToggleTitle}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? "-" : "+"}</button>` : ""}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ""}
     </div>
@@ -1496,17 +1497,17 @@ function escapeHtml2(value) {
 }
 
 // src/ui/stats.ts
-function statItem(label, value, detail, colors, valueColor) {
+function statItem(label, value, detail, colors, valueColor, fontFamily = "inherit") {
   const color = valueColor ?? colors.text;
   return `
-    <div class="pp-stat-card" style="min-width:0;">
+    <div class="pp-stat-card" style="min-width:0;font-family:${fontFamily};">
       <div class="pp-stat-label">${label}</div>
       <div class="pp-stat-value" style="color:${color};">${value}</div>
       <div class="pp-stat-detail">${detail}</div>
     </div>
   `;
 }
-function renderStatsPanel(tree, colors) {
+function renderStatsPanel(tree, colors, chinese = false) {
   const goals = tree.goals ?? [];
   const steps = goals.flatMap((goal) => goal.steps ?? []);
   const completedGoals = goals.filter((goal) => goal.status === "completed").length;
@@ -1514,13 +1515,15 @@ function renderStatsPanel(tree, colors) {
   const inProgressSteps = steps.filter((step) => step.status === "in_progress").length;
   const pendingSteps = steps.length - completedSteps - inProgressSteps;
   const percent = steps.length ? Math.round(completedSteps / steps.length * 100) : 0;
+  const fontFamily = chinese ? "Georgia, 'Times New Roman', 'Songti SC', 'SimSun', 'Noto Serif SC', serif" : "inherit";
+  const t = (zh, en2) => chinese ? zh : en2;
   return `
     <div class="pp-stats-panel" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
       <div class="pp-stats-grid">
-        ${statItem("Goals", `${goals.length}`, `${completedGoals} completed`, colors)}
-        ${statItem("Steps", `${steps.length}`, `${completedSteps} completed`, colors)}
-        ${statItem("In Progress", `${inProgressSteps}`, `${pendingSteps} pending`, colors)}
-        ${statItem("Progress", `${percent}%`, `${completedSteps}/${steps.length} steps`, colors, colors.accent)}
+        ${statItem(t("\u76EE\u6807", "Goals"), `${goals.length}`, `${completedGoals} ${t("\u5DF2\u5B8C\u6210", "completed")}`, colors, void 0, fontFamily)}
+        ${statItem(t("\u6B65\u9AA4", "Steps"), `${steps.length}`, `${completedSteps} ${t("\u5DF2\u5B8C\u6210", "completed")}`, colors, void 0, fontFamily)}
+        ${statItem(t("\u8FDB\u884C\u4E2D", "In Progress"), `${inProgressSteps}`, `${pendingSteps} ${t("\u5F85\u5904\u7406", "pending")}`, colors, void 0, fontFamily)}
+        ${statItem(t("\u8FDB\u5EA6", "Progress"), `${percent}%`, `${completedSteps}/${steps.length} ${t("\u6B65\u9AA4", "steps")}`, colors, colors.accent, fontFamily)}
       </div>
     </div>
   `;
@@ -1530,7 +1533,8 @@ function renderStatsPanel(tree, colors) {
 var FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif";
 function isChineseLocale(api) {
   const locale = api.context.locale ?? (typeof navigator !== "undefined" ? navigator.language : "");
-  return locale.toLowerCase().startsWith("zh");
+  const normalized = locale.toLowerCase();
+  return normalized === "zh" || normalized.startsWith("zh-cn") || normalized.startsWith("zh-hans");
 }
 function ensureAssets() {
   if (typeof document === "undefined") return;
@@ -1551,9 +1555,9 @@ function ensureAssets() {
     .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .pp-stat-card { background:linear-gradient(180deg, var(--pp-surface) 0%, var(--pp-surfaceHover) 100%); border:1px solid var(--pp-border); border-radius:8px; padding:11px 12px; box-shadow:0 3px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.08); transition:transform 0.15s, box-shadow 0.15s; }
     .pp-stat-card:hover { transform:translateY(-1px); box-shadow:0 5px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.10); }
-    .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
-    .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
-    .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pp-stat-label { color:var(--pp-muted); font-size:0.78rem; margin-bottom:4px; }
+    .pp-stat-value { color:var(--pp-text); font-size:1.35rem; font-weight:650; line-height:1.1; }
+    .pp-stat-detail { color:var(--pp-muted); font-size:0.72rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     @media (min-width: 520px) {
       .pp-stats-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
     }
@@ -1643,18 +1647,18 @@ function mount(container, api) {
       return;
     }
     const chinese = isChineseLocale(api);
-    const refreshLabel = isRefreshing ? "Refreshing..." : "Refresh";
+    const refreshLabel = isRefreshing ? chinese ? "\u5237\u65B0\u4E2D..." : "Refreshing..." : chinese ? "\u5237\u65B0" : "Refresh";
     const refreshDisabled = isRefreshing ? "opacity:0.6;cursor:not-allowed;" : "";
     const refreshStyle = isRefreshing ? `background:${colors.accent};border:1px solid ${colors.accent};color:#fff;` : `background:${colors.surface};border:1px solid ${colors.border};color:${colors.text};`;
     const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
     const allGoalsExpanded = tree.goals.length > 0 && tree.goals.every((goal) => expanded.has(goal.id));
-    const toggleAllLabel = allGoalsExpanded ? "Collapse all" : "Expand all";
+    const toggleAllLabel = allGoalsExpanded ? chinese ? "\u5168\u90E8\u6298\u53E0" : "Collapse all" : chinese ? "\u5168\u90E8\u5C55\u5F00" : "Expand all";
     const modeControl = `
       <div class="pp-mode-buttons">
         ${["default", "progress-tree"].map((mode) => {
       const active = mode === extractionMode;
-      const label = mode === "default" ? "Default" : "ProgressTree";
+      const label = mode === "default" ? chinese ? "\u9ED8\u8BA4" : "Default" : chinese ? "\u8FDB\u5EA6\u6811" : "ProgressTree";
       const summary = mode === "default" ? chinese ? "\u4E0D\u4F7F\u7528 LLM\uFF0C\u76F4\u63A5\u5C55\u793A\u7528\u6237\u63D0\u95EE\u5217\u8868\u3002" : "Show a flat list of user queries without LLM extraction." : chinese ? "\u5C55\u793A\u4ECE\u4F1A\u8BDD\u4E2D\u63A8\u65AD\u51FA\u7684\u76EE\u6807\u4E0E\u6B65\u9AA4\u3002" : "Show goals and steps inferred from the session.";
       return `<button type="button" class="pp-mode-button${active ? " active" : ""}" data-mode="${mode}" title="${summary}" aria-pressed="${active}">${label}</button>`;
     }).join("")}
@@ -1667,7 +1671,7 @@ function mount(container, api) {
           <div class="pp-subtitle">${chinese ? "\u81EA\u52A8\u8DDF\u8E2A\u4F1A\u8BDD\u4E2D\u7684\u76EE\u6807\u4E0E\u6B65\u9AA4\u3002" : "Auto-track goals and steps from your session."}</div>
         </div>
         <div class="pp-header-actions">
-          <button type="button" id="pp-toggle-all" title="${allGoalsExpanded ? "Collapse all goals and steps" : "Expand all goals without opening conversations"}" style="display:inline-flex;align-items:center;padding:5px 11px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">${toggleAllLabel}</button>
+          <button type="button" id="pp-toggle-all" title="${allGoalsExpanded ? chinese ? "\u6298\u53E0\u6240\u6709\u76EE\u6807\u548C\u6B65\u9AA4" : "Collapse all goals and steps" : chinese ? "\u5C55\u5F00\u6240\u6709\u76EE\u6807\uFF0C\u4E0D\u6253\u5F00\u4F1A\u8BDD" : "Expand all goals without opening conversations"}" style="display:inline-flex;align-items:center;padding:5px 11px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">${toggleAllLabel}</button>
           ${modeControl}
           <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshStyle}${refreshDisabled}" ${refreshHover}>
             <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
@@ -1675,10 +1679,11 @@ function mount(container, api) {
         </div>
       </div>
     `;
-    root.innerHTML = header + renderStatsPanel(tree, colors) + renderProgressTree(
+    root.innerHTML = header + renderStatsPanel(tree, colors, chinese) + renderProgressTree(
       tree,
       {
         theme: api.context.theme,
+        chinese,
         extractionMode,
         expanded,
         turnExpanded,

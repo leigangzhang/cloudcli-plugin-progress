@@ -14,6 +14,7 @@ const SERIF_FONT = "Georgia, 'Times New Roman', serif";
 
 export interface TreeRenderOptions {
   theme: 'dark' | 'light';
+  chinese?: boolean;
   extractionMode?: ExtractionMode;
   expanded: Set<string>;
   turnExpanded: Set<string>;
@@ -52,6 +53,13 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
     expanded &&
     steps.length > 0 &&
     steps.every((step) => options.turnExpanded.has(step.id));
+  const goalToggleTitle = goalFullyExpanded
+    ? options.chinese
+      ? '折叠所有步骤和会话'
+      : 'Collapse all steps and sessions'
+    : options.chinese
+      ? '展开所有步骤和会话'
+      : 'Expand all steps and sessions';
   const timestamp = formatTimestamp(
     goal.startedAt ??
       steps
@@ -66,7 +74,7 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
         <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
         ${steps.length > 0
-          ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml(goal.id)}" title="${goalFullyExpanded ? 'Collapse all steps and sessions' : 'Expand all steps and sessions'}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? '-' : '+'}</button>`
+          ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml(goal.id)}" title="${goalToggleTitle}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? '-' : '+'}</button>`
           : ''}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}

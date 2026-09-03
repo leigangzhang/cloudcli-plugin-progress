@@ -19,7 +19,12 @@ function isChineseLocale(api: PluginAPI): boolean {
   const locale =
     api.context.locale ??
     (typeof navigator !== 'undefined' ? navigator.language : '');
-  return locale.toLowerCase().startsWith('zh');
+  const normalized = locale.toLowerCase();
+  return (
+    normalized === 'zh' ||
+    normalized.startsWith('zh-cn') ||
+    normalized.startsWith('zh-hans')
+  );
 }
 
 function ensureAssets(): void {
@@ -42,9 +47,9 @@ function ensureAssets(): void {
     .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .pp-stat-card { background:linear-gradient(180deg, var(--pp-surface) 0%, var(--pp-surfaceHover) 100%); border:1px solid var(--pp-border); border-radius:8px; padding:11px 12px; box-shadow:0 3px 8px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.08); transition:transform 0.15s, box-shadow 0.15s; }
     .pp-stat-card:hover { transform:translateY(-1px); box-shadow:0 5px 12px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.10); }
-    .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
-    .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
-    .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .pp-stat-label { color:var(--pp-muted); font-size:0.78rem; margin-bottom:4px; }
+    .pp-stat-value { color:var(--pp-text); font-size:1.35rem; font-weight:650; line-height:1.1; }
+    .pp-stat-detail { color:var(--pp-muted); font-size:0.72rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     @media (min-width: 520px) {
       .pp-stats-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
     }
@@ -147,7 +152,13 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     }
 
     const chinese = isChineseLocale(api);
-    const refreshLabel = isRefreshing ? 'Refreshing...' : 'Refresh';
+    const refreshLabel = isRefreshing
+      ? chinese
+        ? '刷新中...'
+        : 'Refreshing...'
+      : chinese
+        ? '刷新'
+        : 'Refresh';
     const refreshDisabled = isRefreshing ? 'opacity:0.6;cursor:not-allowed;' : '';
     const refreshStyle = isRefreshing
       ? `background:${colors.accent};border:1px solid ${colors.accent};color:#fff;`
@@ -158,12 +169,24 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
     const iconClass = isRefreshing ? 'pp-spin' : '';
     const allGoalsExpanded =
       tree.goals.length > 0 && tree.goals.every((goal) => expanded.has(goal.id));
-    const toggleAllLabel = allGoalsExpanded ? 'Collapse all' : 'Expand all';
+    const toggleAllLabel = allGoalsExpanded
+      ? chinese
+        ? '全部折叠'
+        : 'Collapse all'
+      : chinese
+        ? '全部展开'
+        : 'Expand all';
     const modeControl = `
       <div class="pp-mode-buttons">
         ${(['default', 'progress-tree'] as ExtractionMode[]).map((mode) => {
           const active = mode === extractionMode;
-          const label = mode === 'default' ? 'Default' : 'ProgressTree';
+          const label = mode === 'default'
+            ? chinese
+              ? '默认'
+              : 'Default'
+            : chinese
+              ? '进度树'
+              : 'ProgressTree';
           const summary =
             mode === 'default'
               ? chinese
@@ -183,7 +206,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
           <div class="pp-subtitle">${chinese ? '自动跟踪会话中的目标与步骤。' : 'Auto-track goals and steps from your session.'}</div>
         </div>
         <div class="pp-header-actions">
-          <button type="button" id="pp-toggle-all" title="${allGoalsExpanded ? 'Collapse all goals and steps' : 'Expand all goals without opening conversations'}" style="display:inline-flex;align-items:center;padding:5px 11px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">${toggleAllLabel}</button>
+          <button type="button" id="pp-toggle-all" title="${allGoalsExpanded ? (chinese ? '折叠所有目标和步骤' : 'Collapse all goals and steps') : (chinese ? '展开所有目标，不打开会话' : 'Expand all goals without opening conversations')}" style="display:inline-flex;align-items:center;padding:5px 11px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">${toggleAllLabel}</button>
           ${modeControl}
           <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshStyle}${refreshDisabled}" ${refreshHover}>
             <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
@@ -194,11 +217,12 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     root.innerHTML =
       header +
-      renderStatsPanel(tree, colors) +
+      renderStatsPanel(tree, colors, chinese) +
       renderProgressTree(
         tree,
         {
           theme: api.context.theme,
+          chinese,
           extractionMode,
           expanded,
           turnExpanded,
