@@ -1357,14 +1357,14 @@ var STATUS_LABELS = {
   deleted: "Deleted"
 };
 var STATUS_COLORS = (c) => ({
-  pending: { fg: c.muted, bg: c.surfaceHover, dot: c.muted },
-  in_progress: { fg: c.accent, bg: c.accentSoft, dot: c.accent },
-  completed: { fg: c.success, bg: c.successSoft, dot: c.success },
-  deleted: { fg: c.danger, bg: c.dangerSoft, dot: c.danger }
+  pending: { bg: c.deepBlue, dot: "#fff" },
+  in_progress: { bg: c.deepBlue, dot: "#fff" },
+  completed: { bg: c.deepBlue, dot: "#fff" },
+  deleted: { bg: c.deepBlue, dot: "#fff" }
 });
 function statusBadge(status, colors) {
   const style = STATUS_COLORS(colors)[status];
-  return `<span style="display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:5px;font-family:Georgia, 'Times New Roman', serif;font-size:0.8rem;font-weight:700;color:${colors.deepBlue};background:${style.bg};"><span style="width:6px;height:6px;border-radius:50%;background:${style.dot};flex-shrink:0;"></span>${STATUS_LABELS[status]}</span>`;
+  return `<span style="display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:5px;font-family:Georgia, 'Times New Roman', serif;font-size:0.8rem;font-weight:700;color:#fff;background:${style.bg};"><span style="width:6px;height:6px;border-radius:50%;background:${style.dot};flex-shrink:0;"></span>${STATUS_LABELS[status]}</span>`;
 }
 
 // src/ui/tree.ts
@@ -1417,7 +1417,7 @@ function renderStep(step, options, colors, sequence, embedded = false) {
   const description = escapeHtml2(step.description ?? "");
   const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
-  const statusColor = step.status === "completed" ? colors.success : step.status === "in_progress" ? colors.accent : step.status === "deleted" ? colors.danger : colors.muted;
+  const statusColor = colors.deepBlue;
   const icon = step.status === "completed" ? `<span style="color:${statusColor};display:inline-flex;">${completedIcon}</span>` : `<span style="color:${statusColor};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : "";
   const timestamp = formatTimestamp(options.turnRecords.get(step.promptId)?.timestamp ?? step.completedAt);
