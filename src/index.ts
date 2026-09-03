@@ -52,6 +52,9 @@ function ensureAssets(): void {
     .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
     .pp-goal-header:hover { background:var(--pp-surfaceHover); }
     .pp-step-header:hover { background:var(--pp-surfaceHover); }
+    .pp-tooltip[data-tooltip]:not([data-tooltip=""]) { position:relative; }
+    .pp-tooltip[data-tooltip]:not([data-tooltip=""])::after { content:attr(data-tooltip); position:absolute; left:0; top:calc(100% + 7px); z-index:20; width:max-content; max-width:320px; padding:7px 9px; background:var(--pp-surface); color:var(--pp-text); border:1px solid var(--pp-border); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.12); font-family:Georgia, 'Times New Roman', serif; font-size:0.72rem; line-height:1.35; white-space:normal; opacity:0; visibility:hidden; pointer-events:none; transition:opacity 0.12s, visibility 0.12s; }
+    .pp-tooltip:hover::after { opacity:1; visibility:visible; }
     .pp-turn-panel { font-family: Georgia, 'Times New Roman', serif; }
     .pp-turn-panel .pp-markdown { font-family: inherit; }
 

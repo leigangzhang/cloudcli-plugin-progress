@@ -1397,7 +1397,7 @@ function renderGoal(goal, options, colors) {
       <div class="pp-goal-header" style="position:relative;display:flex;align-items:center;gap:9px;padding:11px 15% 11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        <span class="pp-tooltip" data-tooltip="${description}" style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
         ${steps.length > 0 ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml2(goal.id)}" title="${goalFullyExpanded ? "Collapse all steps and sessions" : "Expand all steps and sessions"}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? "-" : "+"}</button>` : ""}
       </div>
@@ -1428,7 +1428,7 @@ function renderStep(step, options, colors, sequence, embedded = false) {
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${description}">${title}</span>
+        <span class="pp-tooltip" data-tooltip="${description}" style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
       </div>
       ${panel}
@@ -1561,6 +1561,9 @@ function ensureAssets() {
     .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
     .pp-goal-header:hover { background:var(--pp-surfaceHover); }
     .pp-step-header:hover { background:var(--pp-surfaceHover); }
+    .pp-tooltip[data-tooltip]:not([data-tooltip=""]) { position:relative; }
+    .pp-tooltip[data-tooltip]:not([data-tooltip=""])::after { content:attr(data-tooltip); position:absolute; left:0; top:calc(100% + 7px); z-index:20; width:max-content; max-width:320px; padding:7px 9px; background:var(--pp-surface); color:var(--pp-text); border:1px solid var(--pp-border); border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.12); font-family:Georgia, 'Times New Roman', serif; font-size:0.72rem; line-height:1.35; white-space:normal; opacity:0; visibility:hidden; pointer-events:none; transition:opacity 0.12s, visibility 0.12s; }
+    .pp-tooltip:hover::after { opacity:1; visibility:visible; }
     .pp-turn-panel { font-family: Georgia, 'Times New Roman', serif; }
     .pp-turn-panel .pp-markdown { font-family: inherit; }
 

@@ -63,7 +63,7 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
       <div class="pp-goal-header" style="position:relative;display:flex;align-items:center;gap:9px;padding:11px 15% 11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        <span class="pp-tooltip" data-tooltip="${description}" style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
         ${steps.length > 0
           ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml(goal.id)}" title="${goalFullyExpanded ? 'Collapse all steps and sessions' : 'Expand all steps and sessions'}" style="position:absolute;right:6%;top:50%;transform:translateY(-50%);padding:2px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.7rem;line-height:1.2;">${goalFullyExpanded ? '-' : '+'}</button>`
@@ -119,7 +119,7 @@ function renderStep(
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${description}">${title}</span>
+        <span class="pp-tooltip" data-tooltip="${description}" style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
       </div>
       ${panel}
