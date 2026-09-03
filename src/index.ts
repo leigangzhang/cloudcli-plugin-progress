@@ -136,6 +136,9 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
       ? ''
       : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
     const iconClass = isRefreshing ? 'pp-spin' : '';
+    const allGoalsExpanded =
+      tree.goals.length > 0 && tree.goals.every((goal) => expanded.has(goal.id));
+    const toggleAllLabel = allGoalsExpanded ? 'Collapse all' : 'Expand all';
     const modeControl = `
       <div class="pp-mode-buttons">
         ${(['default', 'progress-tree'] as ExtractionMode[]).map((mode) => {
@@ -160,6 +163,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
           <div class="pp-subtitle">${chinese ? '自动跟踪会话中的目标与步骤。' : 'Auto-track goals and steps from your session.'}</div>
         </div>
         <div class="pp-header-actions">
+          <button type="button" id="pp-toggle-all" title="${allGoalsExpanded ? 'Collapse all goals and steps' : 'Expand all goals without opening conversations'}" style="display:inline-flex;align-items:center;padding:5px 11px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">${toggleAllLabel}</button>
           ${modeControl}
           <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshStyle}${refreshDisabled}" ${refreshHover}>
             <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
@@ -211,6 +215,25 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
         if (mode !== extractionMode) void setMode(mode);
       });
     });
+
+    const toggleAllBtn = root.querySelector('#pp-toggle-all');
+    toggleAllBtn?.addEventListener('click', () => {
+      if (allGoalsExpanded) {
+        expanded.clear();
+        turnExpanded.clear();
+      } else {
+        tree.goals.forEach((goal) => expanded.add(goal.id));
+      }
+      render();
+    });
+
+    root.querySelectorAll<HTMLButtonElement>('.pp-goal-toggle').forEach((el) => {
+      el.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const goalId = el.dataset.goalToggleId;
+        if (goalId) toggleGoalAll(goalId);
+      });
+    });
   }
 
   async function toggleStep(el: HTMLElement): Promise<void> {
@@ -237,6 +260,24 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
       }
       render();
     }
+  }
+
+  function toggleGoalAll(goalId: string): void {
+    const goal = tree.goals.find((item) => item.id === goalId);
+    if (!goal) return;
+    const steps = goal.steps ?? [];
+    if (steps.length === 0) return;
+    const fullyExpanded =
+      expanded.has(goalId) && steps.every((step) => turnExpanded.has(step.id));
+    if (fullyExpanded) {
+      expanded.delete(goalId);
+      steps.forEach((step) => turnExpanded.delete(step.id));
+    } else {
+      expanded.add(goalId);
+      steps.forEach((step) => turnExpanded.add(step.id));
+      void hydrateTurnRecords();
+    }
+    render();
   }
 
   function applyResponse(res: unknown): void {

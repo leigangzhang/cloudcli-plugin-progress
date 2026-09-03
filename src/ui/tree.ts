@@ -47,9 +47,14 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
   const toggle = expanded ? chevronDown() : chevronRight();
   const title = escapeHtml(goal.subject);
   const description = goal.description ? escapeHtml(goal.description) : '';
+  const steps = goal.steps ?? [];
+  const goalFullyExpanded =
+    expanded &&
+    steps.length > 0 &&
+    steps.every((step) => options.turnExpanded.has(step.id));
   const timestamp = formatTimestamp(
     goal.startedAt ??
-      goal.steps
+      steps
         ?.map((step) => options.turnRecords.get(step.promptId)?.timestamp)
         .find((value): value is string => Boolean(value)),
   );
@@ -60,6 +65,9 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
         ${statusBadge(goal.status, colors)}
         <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ''}
+        ${steps.length > 0
+          ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml(goal.id)}" title="${goalFullyExpanded ? 'Collapse all steps and sessions' : 'Expand all steps and sessions'}" style="flex-shrink:0;margin-left:10px;padding:3px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.64rem;line-height:1.2;">${goalFullyExpanded ? 'Collapse all' : 'Expand all'}</button>`
+          : ''}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}
     </div>
