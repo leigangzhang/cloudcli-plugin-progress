@@ -182,10 +182,10 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
           const active = mode === extractionMode;
           const label = mode === 'default'
             ? chinese
-              ? '默认'
+              ? '会话记录'
               : 'Default'
             : chinese
-              ? '进度树'
+              ? '会话进度'
               : 'ProgressTree';
           const summary =
             mode === 'default'
