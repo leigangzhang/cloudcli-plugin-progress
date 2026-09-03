@@ -102,14 +102,7 @@ function renderStep(
   const description = escapeHtml(step.description ?? '');
   const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
-  const statusColor =
-    step.status === 'completed'
-      ? colors.success
-      : step.status === 'in_progress'
-        ? colors.accent
-        : step.status === 'deleted'
-          ? colors.danger
-          : colors.muted;
+  const statusColor = colors.deepBlue;
   const icon = step.status === 'completed'
     ? `<span style="color:${statusColor};display:inline-flex;">${completedIcon}</span>`
     : `<span style="color:${statusColor};display:inline-flex;">${pendingIcon}</span>`;
