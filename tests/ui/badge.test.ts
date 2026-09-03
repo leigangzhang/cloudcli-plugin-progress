@@ -6,7 +6,7 @@
   it('renders completed badge', () => {
     const html = statusBadge('completed', themeColors(true));
     expect(html).toContain('Done');
-    expect(html).toContain('#4c88ff');
+    expect(html).toContain('#34c724');
     expect(html).toContain('#fff');
   });
 
