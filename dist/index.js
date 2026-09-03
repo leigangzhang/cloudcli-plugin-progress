@@ -1387,8 +1387,10 @@ function renderGoal(goal, options, colors) {
   const toggle = expanded ? chevronDown() : chevronRight();
   const title = escapeHtml2(goal.subject);
   const description = goal.description ? escapeHtml2(goal.description) : "";
+  const steps = goal.steps ?? [];
+  const goalFullyExpanded = expanded && steps.length > 0 && steps.every((step) => options.turnExpanded.has(step.id));
   const timestamp = formatTimestamp(
-    goal.startedAt ?? goal.steps?.map((step) => options.turnRecords.get(step.promptId)?.timestamp).find((value) => Boolean(value))
+    goal.startedAt ?? steps?.map((step) => options.turnRecords.get(step.promptId)?.timestamp).find((value) => Boolean(value))
   );
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml2(goal.id)}">
@@ -1397,6 +1399,7 @@ function renderGoal(goal, options, colors) {
         ${statusBadge(goal.status, colors)}
         <span style="font-family:${SERIF_FONT};font-size:0.8rem;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
+        ${steps.length > 0 ? `<button type="button" class="pp-goal-toggle" data-goal-toggle-id="${escapeHtml2(goal.id)}" title="${goalFullyExpanded ? "Collapse all steps and sessions" : "Expand all steps and sessions"}" style="flex-shrink:0;margin-left:10px;padding:3px 8px;background:transparent;border:1px solid ${colors.border};border-radius:5px;color:${colors.muted};font-size:0.64rem;line-height:1.2;">${goalFullyExpanded ? "Collapse all" : "Expand all"}</button>` : ""}
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ""}
     </div>
@@ -1629,6 +1632,8 @@ function mount(container, api) {
     const refreshStyle = isRefreshing ? `background:${colors.accent};border:1px solid ${colors.accent};color:#fff;` : `background:${colors.surface};border:1px solid ${colors.border};color:${colors.text};`;
     const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
+    const allGoalsExpanded = tree.goals.length > 0 && tree.goals.every((goal) => expanded.has(goal.id));
+    const toggleAllLabel = allGoalsExpanded ? "Collapse all" : "Expand all";
     const modeControl = `
       <div class="pp-mode-buttons">
         ${["default", "progress-tree"].map((mode) => {
@@ -1646,6 +1651,7 @@ function mount(container, api) {
           <div class="pp-subtitle">${chinese ? "\u81EA\u52A8\u8DDF\u8E2A\u4F1A\u8BDD\u4E2D\u7684\u76EE\u6807\u4E0E\u6B65\u9AA4\u3002" : "Auto-track goals and steps from your session."}</div>
         </div>
         <div class="pp-header-actions">
+          <button type="button" id="pp-toggle-all" title="${allGoalsExpanded ? "Collapse all goals and steps" : "Expand all goals without opening conversations"}" style="display:inline-flex;align-items:center;padding:5px 11px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">${toggleAllLabel}</button>
           ${modeControl}
           <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshStyle}${refreshDisabled}" ${refreshHover}>
             <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
@@ -1690,6 +1696,23 @@ function mount(container, api) {
         if (mode !== extractionMode) void setMode(mode);
       });
     });
+    const toggleAllBtn = root.querySelector("#pp-toggle-all");
+    toggleAllBtn?.addEventListener("click", () => {
+      if (allGoalsExpanded) {
+        expanded.clear();
+        turnExpanded.clear();
+      } else {
+        tree.goals.forEach((goal) => expanded.add(goal.id));
+      }
+      render();
+    });
+    root.querySelectorAll(".pp-goal-toggle").forEach((el) => {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const goalId = el.dataset.goalToggleId;
+        if (goalId) toggleGoalAll(goalId);
+      });
+    });
   }
   async function toggleStep(el) {
     const stepId = el.dataset.stepId;
@@ -1715,6 +1738,22 @@ function mount(container, api) {
       }
       render();
     }
+  }
+  function toggleGoalAll(goalId) {
+    const goal = tree.goals.find((item) => item.id === goalId);
+    if (!goal) return;
+    const steps = goal.steps ?? [];
+    if (steps.length === 0) return;
+    const fullyExpanded = expanded.has(goalId) && steps.every((step) => turnExpanded.has(step.id));
+    if (fullyExpanded) {
+      expanded.delete(goalId);
+      steps.forEach((step) => turnExpanded.delete(step.id));
+    } else {
+      expanded.add(goalId);
+      steps.forEach((step) => turnExpanded.add(step.id));
+      void hydrateTurnRecords();
+    }
+    render();
   }
   function applyResponse(res) {
     if (isProgressResponse(res)) {
