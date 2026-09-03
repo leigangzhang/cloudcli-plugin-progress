@@ -62,6 +62,6 @@ export function themeColors(dark: boolean): ThemeColors {
         successSoft: '#eaf7e9',
         warningSoft: '#fff4e5',
         dangerSoft: '#fdecec',
-        turnPanel: '#f6f4f1',
+        turnPanel: '#fbf9f6',
       };
 }

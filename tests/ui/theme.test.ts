@@ -19,6 +19,6 @@
     expect(colors.accent).toBe('#3370ff');
     expect(colors.accentHover).toBe('#2e5bd7');
     expect(colors.deepBlue).toBe('#1f4e79');
-    expect(colors.turnPanel).toBe('#f6f4f1');
+    expect(colors.turnPanel).toBe('#fbf9f6');
   });
 });
