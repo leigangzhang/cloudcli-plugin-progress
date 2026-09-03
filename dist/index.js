@@ -1410,6 +1410,7 @@ function renderSteps(goal, options, colors) {
 function renderStep(step, options, colors, sequence, embedded = false) {
   const expanded = options.turnExpanded.has(step.id);
   const title = escapeHtml2(step.subject);
+  const description = escapeHtml2(step.description ?? "");
   const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
   const statusColor = step.status === "completed" ? colors.success : step.status === "in_progress" ? colors.accent : step.status === "deleted" ? colors.danger : colors.muted;
@@ -1424,7 +1425,7 @@ function renderStep(step, options, colors, sequence, embedded = false) {
       <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        <span style="font-family:${SERIF_FONT};font-size:0.78rem;font-weight:700;color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${description}">${title}</span>
         ${timestamp ? `<span style="flex-shrink:0;margin-left:8px;font-size:0.66rem;color:${colors.muted};white-space:nowrap;">${timestamp}</span>` : ""}
       </div>
       ${panel}
