@@ -1453,7 +1453,7 @@ function renderBlock(label, text, colors) {
   if (!text) return "";
   return `
     <div style="margin:6px 0;">
-      <div style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};margin-bottom:6px;">${escapeHtml2(label)}</div>
+      <div style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;margin-bottom:6px;">${escapeHtml2(label)}</div>
       ${renderMarkdown(text, colors)}
     </div>
   `;
@@ -1463,7 +1463,7 @@ function renderPlainDetails(label, text, colors) {
   const sizeLabel = text.length >= 1e4 ? `${Math.round(text.length / 1e3)}k` : `${text.length}`;
   return `
     <details style="margin:6px 0;color:${colors.text};">
-      <summary style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};cursor:pointer;">${escapeHtml2(label)} (${sizeLabel} characters)</summary>
+      <summary style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;cursor:pointer;">${escapeHtml2(label)} (${sizeLabel} characters)</summary>
       <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.surfaceHover};border-radius:6px;font-size:0.72rem;line-height:1.5;">${escapeHtml2(text)}</pre>
     </details>
   `;
@@ -1471,7 +1471,7 @@ function renderPlainDetails(label, text, colors) {
 function renderEmptyBlock(label, colors) {
   return `
     <div style="margin:6px 0;">
-      <div style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};margin-bottom:6px;">${escapeHtml2(label)}</div>
+      <div style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;margin-bottom:6px;">${escapeHtml2(label)}</div>
       <div style="color:${colors.muted};font-size:0.72rem;">No reply recorded.</div>
     </div>
   `;

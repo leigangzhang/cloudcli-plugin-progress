@@ -143,7 +143,7 @@ function renderBlock(label: string, text: string | undefined, colors: ThemeColor
   if (!text) return '';
   return `
     <div style="margin:6px 0;">
-      <div style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};margin-bottom:6px;">${escapeHtml(label)}</div>
+      <div style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;margin-bottom:6px;">${escapeHtml(label)}</div>
       ${renderMarkdown(text, colors)}
     </div>
   `;
@@ -158,7 +158,7 @@ function renderPlainDetails(
   const sizeLabel = text.length >= 10_000 ? `${Math.round(text.length / 1000)}k` : `${text.length}`;
   return `
     <details style="margin:6px 0;color:${colors.text};">
-      <summary style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};cursor:pointer;">${escapeHtml(label)} (${sizeLabel} characters)</summary>
+      <summary style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;cursor:pointer;">${escapeHtml(label)} (${sizeLabel} characters)</summary>
       <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.surfaceHover};border-radius:6px;font-size:0.72rem;line-height:1.5;">${escapeHtml(text)}</pre>
     </details>
   `;
@@ -167,7 +167,7 @@ function renderPlainDetails(
 function renderEmptyBlock(label: string, colors: ThemeColors): string {
   return `
     <div style="margin:6px 0;">
-      <div style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};margin-bottom:6px;">${escapeHtml(label)}</div>
+      <div style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;margin-bottom:6px;">${escapeHtml(label)}</div>
       <div style="color:${colors.muted};font-size:0.72rem;">No reply recorded.</div>
     </div>
   `;
