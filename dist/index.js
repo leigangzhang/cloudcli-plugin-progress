@@ -1575,7 +1575,7 @@ function ensureAssets() {
     .pp-markdown a:hover { color: var(--pp-text); }
     .pp-markdown ul, .pp-markdown ol { margin: 0.55em 0; padding-left: 1.6em; }
     .pp-markdown li { margin: 0.22em 0; }
-    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding: 8px 12px; margin: 0.55em 0; color: var(--pp-muted); background:var(--pp-surfaceHover); border-radius:0 6px 6px 0; }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding: 0 0 0 12px; margin: 0.55em 0; color: var(--pp-muted); background: transparent; font-size:0.75rem; line-height:1.2; }
     .pp-markdown table { border-collapse: collapse; margin: 0.55em 0; border:1px solid var(--pp-border); }
     .pp-markdown th { background:var(--pp-surfaceHover); color:var(--pp-muted); }
     .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 5px 8px; }
