@@ -7,6 +7,7 @@ export interface ThemeColors {
   text: string;
   muted: string;
   accent: string;
+  accentHover: string;
   dim: string;
   accentSoft: string;
   success: string;
@@ -25,9 +26,10 @@ export function themeColors(dark: boolean): ThemeColors {
         surfaceHover: '#2a2b2f',
         border: '#333438',
         divider: '#2e3033',
-        text: '#e5e6eb',
-        muted: '#8f959e',
+        text: '#f5f6f7',
+        muted: '#9aa0a6',
         accent: '#4c88ff',
+        accentHover: '#6ba1ff',
         dim: '#2a2b2f',
         accentSoft: 'rgba(76,136,255,0.16)',
         success: '#34c724',
@@ -40,19 +42,20 @@ export function themeColors(dark: boolean): ThemeColors {
     : {
         bg: '#f5f6f7',
         surface: '#ffffff',
-        surfaceHover: '#f2f3f5',
+        surfaceHover: '#f7f8fa',
         border: '#e5e6eb',
-        divider: '#ebedf0',
+        divider: '#eef0f3',
         text: '#1f2329',
-        muted: '#646a73',
+        muted: '#6f7785',
         accent: '#3370ff',
+        accentHover: '#2e5bd7',
         dim: '#f2f3f5',
-        accentSoft: '#f0f5ff',
+        accentSoft: '#eff4ff',
         success: '#34c724',
         warning: '#ff8800',
         danger: '#f54a45',
-        successSoft: 'rgba(52,199,36,0.10)',
-        warningSoft: 'rgba(255,136,0,0.10)',
-        dangerSoft: 'rgba(245,74,69,0.10)',
+        successSoft: '#eaf7e9',
+        warningSoft: '#fff4e5',
+        dangerSoft: '#fdecec',
       };
 }

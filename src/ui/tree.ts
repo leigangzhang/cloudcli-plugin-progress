@@ -47,10 +47,10 @@ function renderGoal(goal: ProgressGoal, options: TreeRenderOptions, colors: Them
   const description = goal.description ? escapeHtml(goal.description) : '';
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml(goal.id)}">
-      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">
+      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-size:0.8rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        <span style="font-size:0.8rem;font-weight:${goal.status === 'in_progress' ? '600' : '500'};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ''}
     </div>
@@ -76,26 +76,31 @@ function renderStep(
   const title = escapeHtml(step.subject);
   const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
+  const statusColor =
+    step.status === 'completed'
+      ? colors.success
+      : step.status === 'in_progress'
+        ? colors.accent
+        : step.status === 'deleted'
+          ? colors.danger
+          : colors.muted;
   const icon = step.status === 'completed'
-    ? `<span style="color:${colors.success};display:inline-flex;">${completedIcon}</span>`
-    : `<span style="color:${colors.muted};display:inline-flex;">${pendingIcon}</span>`;
+    ? `<span style="color:${statusColor};display:inline-flex;">${completedIcon}</span>`
+    : `<span style="color:${statusColor};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : '';
   const sequenceLabel = sequence
-    ? `<span style="width:18px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.72rem;">${sequence}.</span>`
+    ? `<span style="width:22px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.7rem;">${sequence}.</span>`
     : '';
   const rowStyle = embedded
     ? 'padding:6px 0;'
     : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
-  const hover = embedded
-    ? ''
-    : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
   const stepRowBackground = embedded ? 'background:transparent;' : `background:${colors.surface};`;
   return `
     <div class="pp-step" data-step-id="${escapeHtml(step.id)}" data-prompt-id="${escapeHtml(step.promptId)}" style="${stepRowBackground}">
-      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;transition:background 0.15s;" ${hover}>
+      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-size:0.76rem;color:${colors.text};opacity:0.9;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        <span style="font-size:0.76rem;font-weight:${step.status === 'in_progress' ? '600' : '400'};color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
       </div>
       ${panel}
     </div>
@@ -114,7 +119,7 @@ function renderTurnPanel(step: ProgressStep, options: TreeRenderOptions, colors:
   const reasoningBlock = renderPlainDetails('Model reasoning', turn.thinkingText, colors);
   const toolBlock = renderPlainDetails('Tool activity', turn.toolText, colors);
   return `
-    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-radius:6px;background:${colors.accentSoft};" onclick="event.stopPropagation();">
+    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-left:3px solid ${colors.accent};border-radius:0 6px 6px 0;background:${colors.accentSoft};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${toolBlock}
