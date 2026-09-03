@@ -1468,7 +1468,7 @@ function renderPlainDetails(label, text, colors) {
   return `
     <details style="margin:6px 0;color:${colors.text};">
       <summary style="color:${colors.text};font-size:0.75rem;line-height:1.2;font-weight:700;cursor:pointer;">${escapeHtml2(label)} (${sizeLabel} characters)</summary>
-      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.surfaceHover};border-radius:6px;font-size:0.72rem;line-height:1.5;">${escapeHtml2(text)}</pre>
+      <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:#000;color:#e5e6eb;border:1px solid ${colors.border};border-radius:6px;font-size:0.75rem;line-height:1.2;">${escapeHtml2(text)}</pre>
     </details>
   `;
 }
