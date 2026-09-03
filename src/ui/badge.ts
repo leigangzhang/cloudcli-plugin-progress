@@ -12,8 +12,8 @@ const STATUS_COLORS = (
   c: ThemeColors,
 ): Record<ProgressStatus, { bg: string; dot: string }> => ({
   pending: { bg: c.muted, dot: '#fff' },
-  in_progress: { bg: c.accent, dot: '#fff' },
-  completed: { bg: c.success, dot: '#fff' },
+  in_progress: { bg: c.warning, dot: '#fff' },
+  completed: { bg: c.accent, dot: '#fff' },
   deleted: { bg: c.danger, dot: '#fff' },
 });
 

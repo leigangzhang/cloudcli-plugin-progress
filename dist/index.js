@@ -1358,8 +1358,8 @@ var STATUS_LABELS = {
 };
 var STATUS_COLORS = (c) => ({
   pending: { bg: c.muted, dot: "#fff" },
-  in_progress: { bg: c.accent, dot: "#fff" },
-  completed: { bg: c.success, dot: "#fff" },
+  in_progress: { bg: c.warning, dot: "#fff" },
+  completed: { bg: c.accent, dot: "#fff" },
   deleted: { bg: c.danger, dot: "#fff" }
 });
 function statusBadge(status, colors) {
