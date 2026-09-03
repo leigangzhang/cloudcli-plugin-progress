@@ -72,9 +72,10 @@ function themeColors(dark) {
     surfaceHover: "#2a2b2f",
     border: "#333438",
     divider: "#2e3033",
-    text: "#e5e6eb",
-    muted: "#8f959e",
+    text: "#f5f6f7",
+    muted: "#9aa0a6",
     accent: "#4c88ff",
+    accentHover: "#6ba1ff",
     dim: "#2a2b2f",
     accentSoft: "rgba(76,136,255,0.16)",
     success: "#34c724",
@@ -86,20 +87,21 @@ function themeColors(dark) {
   } : {
     bg: "#f5f6f7",
     surface: "#ffffff",
-    surfaceHover: "#f2f3f5",
+    surfaceHover: "#f7f8fa",
     border: "#e5e6eb",
-    divider: "#ebedf0",
+    divider: "#eef0f3",
     text: "#1f2329",
-    muted: "#646a73",
+    muted: "#6f7785",
     accent: "#3370ff",
+    accentHover: "#2e5bd7",
     dim: "#f2f3f5",
-    accentSoft: "#f0f5ff",
+    accentSoft: "#eff4ff",
     success: "#34c724",
     warning: "#ff8800",
     danger: "#f54a45",
-    successSoft: "rgba(52,199,36,0.10)",
-    warningSoft: "rgba(255,136,0,0.10)",
-    dangerSoft: "rgba(245,74,69,0.10)"
+    successSoft: "#eaf7e9",
+    warningSoft: "#fff4e5",
+    dangerSoft: "#fdecec"
   };
 }
 
@@ -1382,10 +1384,10 @@ function renderGoal(goal, options, colors) {
   const description = goal.description ? escapeHtml2(goal.description) : "";
   return `
     <div class="pp-goal" data-goal-id="${escapeHtml2(goal.id)}">
-      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'">
+      <div class="pp-goal-header" style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-bottom:1px solid ${colors.divider};background:${colors.surface};cursor:pointer;">
         <span style="display:inline-flex;width:16px;height:16px;flex-shrink:0;color:${colors.muted};">${toggle}</span>
         ${statusBadge(goal.status, colors)}
-        <span style="font-size:0.8rem;font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
+        <span style="font-size:0.8rem;font-weight:${goal.status === "in_progress" ? "600" : "500"};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${colors.text};" title="${description}">${title}</span>
       </div>
       ${expanded ? renderSteps(goal, options, colors) : ""}
     </div>
@@ -1401,18 +1403,18 @@ function renderStep(step, options, colors, sequence, embedded = false) {
   const title = escapeHtml2(step.subject);
   const completedIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
   const pendingIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"></circle></svg>`;
-  const icon = step.status === "completed" ? `<span style="color:${colors.success};display:inline-flex;">${completedIcon}</span>` : `<span style="color:${colors.muted};display:inline-flex;">${pendingIcon}</span>`;
+  const statusColor = step.status === "completed" ? colors.success : step.status === "in_progress" ? colors.accent : step.status === "deleted" ? colors.danger : colors.muted;
+  const icon = step.status === "completed" ? `<span style="color:${statusColor};display:inline-flex;">${completedIcon}</span>` : `<span style="color:${statusColor};display:inline-flex;">${pendingIcon}</span>`;
   const panel = expanded ? renderTurnPanel(step, options, colors) : "";
-  const sequenceLabel = sequence ? `<span style="width:18px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.72rem;">${sequence}.</span>` : "";
+  const sequenceLabel = sequence ? `<span style="width:22px;text-align:right;flex-shrink:0;color:${colors.muted};font-size:0.7rem;">${sequence}.</span>` : "";
   const rowStyle = embedded ? "padding:6px 0;" : `padding:10px 12px;border-bottom:1px solid ${colors.divider};`;
-  const hover = embedded ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
   const stepRowBackground = embedded ? "background:transparent;" : `background:${colors.surface};`;
   return `
     <div class="pp-step" data-step-id="${escapeHtml2(step.id)}" data-prompt-id="${escapeHtml2(step.promptId)}" style="${stepRowBackground}">
-      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;transition:background 0.15s;" ${hover}>
+      <div class="pp-step-header" style="display:flex;align-items:center;gap:8px;${rowStyle}cursor:pointer;">
         ${sequenceLabel}
         <span style="display:inline-flex;width:12px;height:12px;flex-shrink:0;">${icon}</span>
-        <span style="font-size:0.76rem;color:${colors.text};opacity:0.9;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
+        <span style="font-size:0.76rem;font-weight:${step.status === "in_progress" ? "600" : "400"};color:${colors.text};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${title}">${title}</span>
       </div>
       ${panel}
     </div>
@@ -1428,7 +1430,7 @@ function renderTurnPanel(step, options, colors) {
   const reasoningBlock = renderPlainDetails("Model reasoning", turn.thinkingText, colors);
   const toolBlock = renderPlainDetails("Tool activity", turn.toolText, colors);
   return `
-    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-radius:6px;background:${colors.accentSoft};" onclick="event.stopPropagation();">
+    <div class="pp-turn-panel" style="margin-left:20px;margin-bottom:8px;padding:10px 12px;border-left:3px solid ${colors.accent};border-radius:0 6px 6px 0;background:${colors.accentSoft};" onclick="event.stopPropagation();">
       ${userBlock}
       ${reasoningBlock}
       ${toolBlock}
@@ -1472,12 +1474,13 @@ function escapeHtml2(value) {
 }
 
 // src/ui/stats.ts
-function statItem(label, value, detail, colors) {
+function statItem(label, value, detail, colors, valueColor) {
+  const color = valueColor ?? colors.text;
   return `
-    <div style="min-width:0;">
-      <div style="color:${colors.muted};font-size:0.68rem;margin-bottom:3px;">${label}</div>
-      <div style="color:${colors.text};font-size:1rem;font-weight:600;line-height:1.2;">${value}</div>
-      <div style="color:${colors.muted};font-size:0.66rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detail}</div>
+    <div class="pp-stat-item" style="min-width:0;">
+      <div class="pp-stat-label">${label}</div>
+      <div class="pp-stat-value" style="color:${color};">${value}</div>
+      <div class="pp-stat-detail">${detail}</div>
     </div>
   `;
 }
@@ -1491,11 +1494,11 @@ function renderStatsPanel(tree, colors) {
   const percent = steps.length ? Math.round(completedSteps / steps.length * 100) : 0;
   return `
     <div class="pp-stats-panel" style="display:flex;flex-direction:column;gap:12px;padding:12px 14px;margin-bottom:12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:8px;">
-      <div class="pp-stats-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;">
+      <div class="pp-stats-grid">
         ${statItem("Goals", `${goals.length}`, `${completedGoals} completed`, colors)}
         ${statItem("Steps", `${steps.length}`, `${completedSteps} completed`, colors)}
         ${statItem("In Progress", `${inProgressSteps}`, `${pendingSteps} pending`, colors)}
-        ${statItem("Progress", `${percent}%`, `${completedSteps}/${steps.length} steps`, colors)}
+        ${statItem("Progress", `${percent}%`, `${completedSteps}/${steps.length} steps`, colors, colors.accent)}
       </div>
       <div class="pp-progress-track" style="height:6px;background:${colors.surfaceHover};border-radius:999px;overflow:hidden;">
         <div style="height:100%;width:${percent}%;background:${colors.accent};border-radius:999px;transition:width 0.2s;"></div>
@@ -1514,25 +1517,42 @@ function ensureAssets() {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
-    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; }
+    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
     .pp-mode-option { display:inline-flex; }
     .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
-    .pp-mode-option span { padding:5px 13px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
+    .pp-mode-option span { padding:5px 12px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
     .pp-mode-option input:checked + span { background:var(--pp-accent); color:#fff; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
-    .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
-    .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
-    .pp-markdown h1 { font-size: 1.1em; }
-    .pp-markdown h2 { font-size: 1em; }
-    .pp-markdown h3 { font-size: 0.95em; }
-    .pp-markdown pre { background: var(--pp-surfaceHover); padding: 10px; border-radius: 6px; overflow: auto; margin: 0.5em 0; }
+
+    .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
+    .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
+    .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    @media (min-width: 520px) {
+      .pp-stats-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    }
+
+    .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
+    .pp-goal-header:hover { background:var(--pp-surfaceHover); }
+    .pp-step-header:hover { background:var(--pp-surfaceHover); }
+
+    .pp-markdown { font-size:0.78rem; line-height:1.65; color:var(--pp-text); }
+    .pp-markdown p { margin: 0 0 0.55em; }
+    .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.7em 0 0.35em; font-weight: 600; line-height:1.3; }
+    .pp-markdown h1 { font-size:1.05em; border-bottom:1px solid var(--pp-divider); padding-bottom:4px; }
+    .pp-markdown h2 { font-size:0.98em; }
+    .pp-markdown h3 { font-size:0.9em; }
+    .pp-markdown h4 { font-size:0.84em; }
+    .pp-markdown pre { background: var(--pp-surfaceHover); border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; }
     .pp-markdown pre code { background: transparent; padding: 0; }
-    .pp-markdown code { font-family: inherit; background: var(--pp-surfaceHover); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
+    .pp-markdown pre code, .pp-markdown code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+    .pp-markdown code { background: var(--pp-accentSoft); color: var(--pp-accent); padding: 2px 5px; border-radius: 4px; font-size: 0.86em; }
     .pp-markdown a { color: var(--pp-accent); text-decoration: none; }
     .pp-markdown a:hover { text-decoration: underline; }
-    .pp-markdown ul, .pp-markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
-    .pp-markdown li { margin: 0.2em 0; }
-    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 10px; margin: 0.5em 0; color: var(--pp-muted); }
-    .pp-markdown table { border-collapse: collapse; margin: 0.5em 0; }
+    .pp-markdown ul, .pp-markdown ol { margin: 0.55em 0; padding-left: 1.6em; }
+    .pp-markdown li { margin: 0.22em 0; }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-accent); padding: 8px 12px; margin: 0.55em 0; color: var(--pp-muted); background:var(--pp-surfaceHover); border-radius:0 6px 6px 0; }
+    .pp-markdown table { border-collapse: collapse; margin: 0.55em 0; border:1px solid var(--pp-border); }
+    .pp-markdown th { background:var(--pp-surfaceHover); color:var(--pp-muted); }
     .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 5px 8px; }
     @keyframes pp-spin { to { transform: rotate(360deg); } }
     .pp-spin { display: inline-flex; animation: pp-spin 1s linear infinite; }
@@ -1579,7 +1599,7 @@ function mount(container, api) {
     }
     const refreshLabel = isRefreshing ? "Refreshing..." : "Refresh";
     const refreshDisabled = isRefreshing ? "opacity:0.6;cursor:not-allowed;" : "";
-    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
+    const refreshHover = isRefreshing ? "" : `onmouseover="this.style.background='${colors.accentHover}'" onmouseout="this.style.background='${colors.accent}'"`;
     const iconClass = isRefreshing ? "pp-spin" : "";
     const modeControl = `
       <div class="pp-mode-control">
@@ -1596,7 +1616,7 @@ function mount(container, api) {
           <div style="font-size:0.92rem;font-weight:600;color:${colors.text};">Progress</div>
           ${modeControl}
         </div>
-        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+        <button id="pp-refresh" ${isRefreshing ? "disabled" : ""} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
           <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
         </button>
       </div>

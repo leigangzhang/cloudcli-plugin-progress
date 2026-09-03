@@ -24,25 +24,42 @@ function ensureAssets(): void {
   style.textContent = `
     .pp-root * { box-sizing: border-box; }
     .pp-root button { font-family: inherit; cursor: pointer; }
-    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; }
+    .pp-mode-control { display:inline-flex; align-items:center; gap:3px; padding:3px; background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
     .pp-mode-option { display:inline-flex; }
     .pp-mode-option input { position:absolute; width:1px; height:1px; opacity:0; }
-    .pp-mode-option span { padding:5px 13px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
+    .pp-mode-option span { padding:5px 12px; border-radius:6px; font-size:0.72rem; line-height:1.3; color:var(--pp-muted); cursor:pointer; transition:background 0.15s, color 0.15s, box-shadow 0.15s; }
     .pp-mode-option input:checked + span { background:var(--pp-accent); color:#fff; font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,0.08); }
-    .pp-markdown p { margin: 0 0 0.5em; line-height: 1.5; }
-    .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.6em 0 0.3em; font-weight: 600; }
-    .pp-markdown h1 { font-size: 1.1em; }
-    .pp-markdown h2 { font-size: 1em; }
-    .pp-markdown h3 { font-size: 0.95em; }
-    .pp-markdown pre { background: var(--pp-surfaceHover); padding: 10px; border-radius: 6px; overflow: auto; margin: 0.5em 0; }
+
+    .pp-stats-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .pp-stat-label { color:var(--pp-muted); font-size:0.68rem; margin-bottom:4px; }
+    .pp-stat-value { color:var(--pp-text); font-size:1.18rem; font-weight:650; line-height:1.1; }
+    .pp-stat-detail { color:var(--pp-muted); font-size:0.64rem; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    @media (min-width: 520px) {
+      .pp-stats-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    }
+
+    .pp-goal-header, .pp-step-header { transition:background 0.15s, border-color 0.15s; }
+    .pp-goal-header:hover { background:var(--pp-surfaceHover); }
+    .pp-step-header:hover { background:var(--pp-surfaceHover); }
+
+    .pp-markdown { font-size:0.78rem; line-height:1.65; color:var(--pp-text); }
+    .pp-markdown p { margin: 0 0 0.55em; }
+    .pp-markdown h1, .pp-markdown h2, .pp-markdown h3, .pp-markdown h4 { margin: 0.7em 0 0.35em; font-weight: 600; line-height:1.3; }
+    .pp-markdown h1 { font-size:1.05em; border-bottom:1px solid var(--pp-divider); padding-bottom:4px; }
+    .pp-markdown h2 { font-size:0.98em; }
+    .pp-markdown h3 { font-size:0.9em; }
+    .pp-markdown h4 { font-size:0.84em; }
+    .pp-markdown pre { background: var(--pp-surfaceHover); border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; }
     .pp-markdown pre code { background: transparent; padding: 0; }
-    .pp-markdown code { font-family: inherit; background: var(--pp-surfaceHover); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; }
+    .pp-markdown pre code, .pp-markdown code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+    .pp-markdown code { background: var(--pp-accentSoft); color: var(--pp-accent); padding: 2px 5px; border-radius: 4px; font-size: 0.86em; }
     .pp-markdown a { color: var(--pp-accent); text-decoration: none; }
     .pp-markdown a:hover { text-decoration: underline; }
-    .pp-markdown ul, .pp-markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
-    .pp-markdown li { margin: 0.2em 0; }
-    .pp-markdown blockquote { border-left: 3px solid var(--pp-border); padding-left: 10px; margin: 0.5em 0; color: var(--pp-muted); }
-    .pp-markdown table { border-collapse: collapse; margin: 0.5em 0; }
+    .pp-markdown ul, .pp-markdown ol { margin: 0.55em 0; padding-left: 1.6em; }
+    .pp-markdown li { margin: 0.22em 0; }
+    .pp-markdown blockquote { border-left: 3px solid var(--pp-accent); padding: 8px 12px; margin: 0.55em 0; color: var(--pp-muted); background:var(--pp-surfaceHover); border-radius:0 6px 6px 0; }
+    .pp-markdown table { border-collapse: collapse; margin: 0.55em 0; border:1px solid var(--pp-border); }
+    .pp-markdown th { background:var(--pp-surfaceHover); color:var(--pp-muted); }
     .pp-markdown th, .pp-markdown td { border: 1px solid var(--pp-border); padding: 5px 8px; }
     @keyframes pp-spin { to { transform: rotate(360deg); } }
     .pp-spin { display: inline-flex; animation: pp-spin 1s linear infinite; }
@@ -98,7 +115,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
 
     const refreshLabel = isRefreshing ? 'Refreshing...' : 'Refresh';
     const refreshDisabled = isRefreshing ? 'opacity:0.6;cursor:not-allowed;' : '';
-    const refreshHover = isRefreshing ? '' : `onmouseover="this.style.background='${colors.surfaceHover}'" onmouseout="this.style.background='${colors.surface}'"`;
+    const refreshHover = isRefreshing ? '' : `onmouseover="this.style.background='${colors.accentHover}'" onmouseout="this.style.background='${colors.accent}'"`;
     const iconClass = isRefreshing ? 'pp-spin' : '';
     const modeControl = `
       <div class="pp-mode-control">
@@ -115,7 +132,7 @@ export function mount(container: HTMLElement, api: PluginAPI): void {
           <div style="font-size:0.92rem;font-weight:600;color:${colors.text};">Progress</div>
           ${modeControl}
         </div>
-        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.surface};border:1px solid ${colors.border};border-radius:6px;color:${colors.text};font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
+        <button id="pp-refresh" ${isRefreshing ? 'disabled' : ''} style="display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:${colors.accent};border:1px solid ${colors.accent};border-radius:6px;color:#fff;font-size:0.72rem;transition:background 0.15s, border-color 0.15s;${refreshDisabled}" ${refreshHover}>
           <span class="${iconClass}">${refreshIcon()}</span> ${refreshLabel}
         </button>
       </div>

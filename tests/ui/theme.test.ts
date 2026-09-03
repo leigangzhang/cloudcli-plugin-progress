@@ -5,8 +5,9 @@
   it('returns dark palette', () => {
     const colors = themeColors(true);
     expect(colors.bg).toBe('#17171a');
-    expect(colors.text).toBe('#e5e6eb');
+    expect(colors.text).toBe('#f5f6f7');
     expect(colors.accent).toBe('#4c88ff');
+    expect(colors.accentHover).toBe('#6ba1ff');
   });
 
   it('returns light palette', () => {
@@ -14,5 +15,6 @@
     expect(colors.bg).toBe('#f5f6f7');
     expect(colors.text).toBe('#1f2329');
     expect(colors.accent).toBe('#3370ff');
+    expect(colors.accentHover).toBe('#2e5bd7');
   });
 });
