@@ -9,7 +9,7 @@ function statItem(
   valueColor?: string,
   fontFamily = 'inherit',
 ): string {
-  const color = valueColor ?? colors.text;
+  const color = valueColor ?? colors.deepBlue;
   return `
     <div class="pp-stat-card" style="min-width:0;font-family:${fontFamily};">
       <div class="pp-stat-label">${label}</div>
@@ -42,7 +42,7 @@ export function renderStatsPanel(
         ${statItem(t('目标', 'Goals'), `${goals.length}`, `${completedGoals} ${t('已完成', 'completed')}`, colors, undefined, fontFamily)}
         ${statItem(t('步骤', 'Steps'), `${steps.length}`, `${completedSteps} ${t('已完成', 'completed')}`, colors, undefined, fontFamily)}
         ${statItem(t('进行中', 'In Progress'), `${inProgressSteps}`, `${pendingSteps} ${t('待处理', 'pending')}`, colors, undefined, fontFamily)}
-        ${statItem(t('进度', 'Progress'), `${percent}%`, `${completedSteps}/${steps.length} ${t('步骤', 'steps')}`, colors, colors.accent, fontFamily)}
+        ${statItem(t('进度', 'Progress'), `${percent}%`, `${completedSteps}/${steps.length} ${t('步骤', 'steps')}`, colors, colors.deepBlue, fontFamily)}
       </div>
     </div>
   `;

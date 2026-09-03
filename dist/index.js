@@ -1498,7 +1498,7 @@ function escapeHtml2(value) {
 
 // src/ui/stats.ts
 function statItem(label, value, detail, colors, valueColor, fontFamily = "inherit") {
-  const color = valueColor ?? colors.text;
+  const color = valueColor ?? colors.deepBlue;
   return `
     <div class="pp-stat-card" style="min-width:0;font-family:${fontFamily};">
       <div class="pp-stat-label">${label}</div>
@@ -1523,7 +1523,7 @@ function renderStatsPanel(tree, colors, chinese = false) {
         ${statItem(t("\u76EE\u6807", "Goals"), `${goals.length}`, `${completedGoals} ${t("\u5DF2\u5B8C\u6210", "completed")}`, colors, void 0, fontFamily)}
         ${statItem(t("\u6B65\u9AA4", "Steps"), `${steps.length}`, `${completedSteps} ${t("\u5DF2\u5B8C\u6210", "completed")}`, colors, void 0, fontFamily)}
         ${statItem(t("\u8FDB\u884C\u4E2D", "In Progress"), `${inProgressSteps}`, `${pendingSteps} ${t("\u5F85\u5904\u7406", "pending")}`, colors, void 0, fontFamily)}
-        ${statItem(t("\u8FDB\u5EA6", "Progress"), `${percent}%`, `${completedSteps}/${steps.length} ${t("\u6B65\u9AA4", "steps")}`, colors, colors.accent, fontFamily)}
+        ${statItem(t("\u8FDB\u5EA6", "Progress"), `${percent}%`, `${completedSteps}/${steps.length} ${t("\u6B65\u9AA4", "steps")}`, colors, colors.deepBlue, fontFamily)}
       </div>
     </div>
   `;
