@@ -105,7 +105,7 @@ function themeColors(dark) {
     successSoft: "#eaf7e9",
     warningSoft: "#fff4e5",
     dangerSoft: "#fdecec",
-    turnPanel: "#f6f4f1"
+    turnPanel: "#fbf9f6"
   };
 }
 
@@ -1453,7 +1453,7 @@ function renderBlock(label, text, colors) {
   if (!text) return "";
   return `
     <div style="margin:6px 0;">
-      <div style="color:${colors.muted};font-size:0.7rem;margin-bottom:4px;">${escapeHtml2(label)}</div>
+      <div style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};margin-bottom:6px;">${escapeHtml2(label)}</div>
       ${renderMarkdown(text, colors)}
     </div>
   `;
@@ -1463,7 +1463,7 @@ function renderPlainDetails(label, text, colors) {
   const sizeLabel = text.length >= 1e4 ? `${Math.round(text.length / 1e3)}k` : `${text.length}`;
   return `
     <details style="margin:6px 0;color:${colors.text};">
-      <summary style="color:${colors.muted};font-size:0.7rem;cursor:pointer;">${escapeHtml2(label)} (${sizeLabel} characters)</summary>
+      <summary style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};cursor:pointer;">${escapeHtml2(label)} (${sizeLabel} characters)</summary>
       <pre style="margin:6px 0 0;padding:8px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;background:${colors.surfaceHover};border-radius:6px;font-size:0.72rem;line-height:1.5;">${escapeHtml2(text)}</pre>
     </details>
   `;
@@ -1471,7 +1471,7 @@ function renderPlainDetails(label, text, colors) {
 function renderEmptyBlock(label, colors) {
   return `
     <div style="margin:6px 0;">
-      <div style="color:${colors.muted};font-size:0.7rem;margin-bottom:4px;">${escapeHtml2(label)}</div>
+      <div style="color:${colors.text};font-size:0.92rem;font-weight:700;font-family:${SERIF_FONT};margin-bottom:6px;">${escapeHtml2(label)}</div>
       <div style="color:${colors.muted};font-size:0.72rem;">No reply recorded.</div>
     </div>
   `;
@@ -1567,9 +1567,9 @@ function ensureAssets() {
     .pp-markdown h2 { font-size:0.98em; }
     .pp-markdown h3 { font-size:0.9em; }
     .pp-markdown h4 { font-size:0.84em; }
-    .pp-markdown pre { background: var(--pp-surfaceHover); border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; }
-    .pp-markdown pre code { background: transparent; padding: 0; }
-    .pp-markdown pre code, .pp-markdown code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+    .pp-markdown pre { background: #000; color: #e5e6eb; border:1px solid var(--pp-border); padding: 10px; border-radius: 6px; overflow: auto; max-height: 320px; margin: 0.55em 0; }
+    .pp-markdown pre code { background: transparent; padding: 0; color: inherit; }
+    .pp-markdown pre code, .pp-markdown code { font-family: 'Courier New', Courier, monospace; }
     .pp-markdown code { background: transparent; color: inherit; padding: 0; border-radius: 0; font-size: 0.9em; }
     .pp-markdown a { color: var(--pp-muted); text-decoration: underline; }
     .pp-markdown a:hover { color: var(--pp-text); }
