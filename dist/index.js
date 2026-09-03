@@ -1658,7 +1658,7 @@ function mount(container, api) {
       <div class="pp-mode-buttons">
         ${["default", "progress-tree"].map((mode) => {
       const active = mode === extractionMode;
-      const label = mode === "default" ? chinese ? "\u9ED8\u8BA4" : "Default" : chinese ? "\u8FDB\u5EA6\u6811" : "ProgressTree";
+      const label = mode === "default" ? chinese ? "\u4F1A\u8BDD\u8BB0\u5F55" : "Default" : chinese ? "\u4F1A\u8BDD\u8FDB\u5EA6" : "ProgressTree";
       const summary = mode === "default" ? chinese ? "\u4E0D\u4F7F\u7528 LLM\uFF0C\u76F4\u63A5\u5C55\u793A\u7528\u6237\u63D0\u95EE\u5217\u8868\u3002" : "Show a flat list of user queries without LLM extraction." : chinese ? "\u5C55\u793A\u4ECE\u4F1A\u8BDD\u4E2D\u63A8\u65AD\u51FA\u7684\u76EE\u6807\u4E0E\u6B65\u9AA4\u3002" : "Show goals and steps inferred from the session.";
       return `<button type="button" class="pp-mode-button${active ? " active" : ""}" data-mode="${mode}" title="${summary}" aria-pressed="${active}">${label}</button>`;
     }).join("")}
