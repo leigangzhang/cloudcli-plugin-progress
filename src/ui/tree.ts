@@ -175,7 +175,7 @@ function renderEmptyBlock(label: string, colors: ThemeColors): string {
 
 function renderMarkdown(text: string, _colors: ThemeColors): string {
   const html = marked.parse(text, { async: false }) as string;
-  return `<div class="pp-markdown" style="font-size:0.75rem;line-height:1.2;">${html}</div>`;
+  return `<div class="pp-markdown" style="font-size:0.875rem;line-height:1.5;">${html}</div>`;
 }
 
 function formatTimestamp(value?: string): string {
