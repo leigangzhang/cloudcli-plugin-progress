@@ -1720,13 +1720,15 @@ function mount(container, api) {
     root.querySelectorAll(".pp-tooltip").forEach((el) => {
       const text = el.dataset.tooltip;
       if (!text) return;
-      el.addEventListener("mouseenter", (event) => {
-        const mouse = event;
-        showTooltip(text, mouse.clientX, mouse.clientY);
-      });
       el.addEventListener("mousemove", (event) => {
         const mouse = event;
-        showTooltip(text, mouse.clientX, mouse.clientY);
+        const rect = el.getBoundingClientRect();
+        const relativeX = mouse.clientX - rect.left;
+        if (relativeX <= rect.width * 0.5) {
+          showTooltip(text, mouse.clientX, mouse.clientY);
+        } else {
+          hideTooltip();
+        }
       });
       el.addEventListener("mouseleave", hideTooltip);
     });
