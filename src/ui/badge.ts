@@ -11,10 +11,10 @@ const STATUS_LABELS: Record<ProgressStatus, string> = {
 const STATUS_COLORS = (
   c: ThemeColors,
 ): Record<ProgressStatus, { bg: string; dot: string }> => ({
-  pending: { bg: c.deepBlue, dot: '#fff' },
-  in_progress: { bg: c.deepBlue, dot: '#fff' },
-  completed: { bg: c.deepBlue, dot: '#fff' },
-  deleted: { bg: c.deepBlue, dot: '#fff' },
+  pending: { bg: c.muted, dot: '#fff' },
+  in_progress: { bg: c.accent, dot: '#fff' },
+  completed: { bg: c.success, dot: '#fff' },
+  deleted: { bg: c.danger, dot: '#fff' },
 });
 
 export function statusBadge(status: ProgressStatus, colors: ThemeColors): string {
